@@ -51,6 +51,7 @@ int compare_regions(ulv *bufa, ulv *bufb, size_t count) {
             }
             /* printf("Skipping to next test..."); */
             r = -1;
+			exit(0);
         }
     }
     return r;
@@ -93,6 +94,7 @@ int test_stuck_address(ulv *bufa, size_t count) {
                 }
                 printf("Skipping to next test...\n");
                 fflush(stdout);
+                exit(0);
                 return -1;
             }
         }

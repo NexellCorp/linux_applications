@@ -11,8 +11,12 @@ wget http://pyropus.ca/software/memtester/old-versions/memtester-4.2.1.tar.gz
 	#> vi conf-cc
 	----------------------------------------------------------------------------------------------------
 	cc -O2 -DPOSIX -D_POSIX_C_SOURCE=200809L -D_FILE_OFFSET_BITS=64 -DTEST_NARROW_WRITES -c 
-	
+
+	ARM
 	-> arm-cortex_a9-linux-gnueabi-gcc -O2 -DPOSIX -D_POSIX_C_SOURCE=200809L -D_FILE_OFFSET_BITS=64 -DTEST_NARROW_WRITES -c 
+
+	ARM64
+	-> aarch64-linux-gnu-gcc -O2 -DPOSIX -D_POSIX_C_SOURCE=200809L -D_FILE_OFFSET_BITS=64 -DTEST_NARROW_WRITES -c 
 	----------------------------------------------------------------------------------------------------
 
 	#> vi conf-ld
@@ -20,6 +24,12 @@ wget http://pyropus.ca/software/memtester/old-versions/memtester-4.2.1.tar.gz
 	cc -s
 
 	-> arm-cortex_a9-linux-gnueabi-gcc -s
+
+	ARM64
+	-> aarch64-linux-gnu-gcc -s 
+
+	if want to build static, add "-static" option
+	EX> arm-cortex_a9-linux-gnueabi-gcc -s -static
 	----------------------------------------------------------------------------------------------------
 
 

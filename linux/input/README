@@ -1,0 +1,6 @@
+build
+	- arm-cortex_a9-linux-gnueabi-gcc -W -O2 -o input_event input_event.c 
+
+help
+	#> input_event -h
+	

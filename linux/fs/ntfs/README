@@ -1,0 +1,26 @@
+Source:
+	http://www.tuxera.com/community/ntfs-3g-download/
+
+Build:
+
+	#> ./configure --host=arm-cortex_a9-linux-gnueabi --build=i386-linux --prefix=<BUILD PATH>
+			other configure options:
+			-----------------------------------------------------------------------------------
+			--enable-really-static	: static build
+			--enable-debug			: enable debug message
+			-----------------------------------------------------------------------------------
+
+	#> make
+
+			Dynamic Build files: <PATH>/src/.libs
+			Static  Build files: <PATH>/src
+
+					lowntfs-3g  ntfs-3g  ntfs-3g.probe  ntfs-3g.secaudit  ntfs-3g.usermap
+
+
+	#> make install	
+
+
+Mount:
+	#> ntfs-3g /dev/<Node> <Mount Path>
+	

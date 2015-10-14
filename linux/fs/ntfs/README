@@ -1,3 +1,4 @@
+
 Source:
 	http://www.tuxera.com/community/ntfs-3g-download/
 
@@ -7,8 +8,9 @@ Prepare:
 
 Build:
 
-	#> ./configure --host=arm-cortex_a9-linux-gnueabi --build=i386-linux --prefix=<INSTALL PATH>
-			other configure options:
+	#> ./configure --host=arm-cortex_a9-linux-gnueabi --build=i386-linux --prefix=/usr --exec-prefix=/usr --disable-ldconfig
+
+			configure options:
 			-----------------------------------------------------------------------------------
 			--enable-really-static	: static build
 			--enable-debug			: enable debug message

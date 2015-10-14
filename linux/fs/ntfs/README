@@ -1,9 +1,13 @@
 Source:
 	http://www.tuxera.com/community/ntfs-3g-download/
 
+Prepare:
+
+	#> sudo apt-get install libtool
+
 Build:
 
-	#> ./configure --host=arm-cortex_a9-linux-gnueabi --build=i386-linux --prefix=<BUILD PATH>
+	#> ./configure --host=arm-cortex_a9-linux-gnueabi --build=i386-linux --prefix=<INSTALL PATH>
 			other configure options:
 			-----------------------------------------------------------------------------------
 			--enable-really-static	: static build
@@ -12,13 +16,7 @@ Build:
 
 	#> make
 
-			Dynamic Build files: <PATH>/src/.libs
-			Static  Build files: <PATH>/src
-
-					lowntfs-3g  ntfs-3g  ntfs-3g.probe  ntfs-3g.secaudit  ntfs-3g.usermap
-
-
-	#> make install	
+	#> make install	DESTDIR=<INSTALL PATH>
 
 
 Mount:

@@ -1,0 +1,52 @@
+
+Source:
+	http://download.savannah.gnu.org/releases/fbi-improved/
+
+Prepare:
+
+	build component : flex, bison
+
+	: buildroot with component and intall to crosstool.
+	----------------------------------------------------------------------------------------------------------------
+	Target packages
+
+		Development tools  --->
+
+			[*] bison
+			[*] flex
+	----------------------------------------------------------------------------------------------------------------
+
+Build:
+	#> tar xvf fim-0.4-rc3.tar.gz
+
+	#> ./configure --host=arm-cortex_a9-linux-gnueabi --build=i686-linux 
+			--disable-poppler 
+			--disable-aa 
+			--disable-readline 
+			--disable-tiff 
+			--disable-png 
+			--disable-jpeg 
+			--disable-sdl 
+			--enable-hardcoded-font
+			ac_cv_func_regcomp=yes 
+			fim_cv_regex_broken=no
+			--enable-static 
+			--enable-debug=no
+			CC=gcc
+			------------------------------------------------------------------------------------------------
+			--enable-static : static build
+
+			--enable-debug
+			CC=gcc		: to execute on host pc (ex> b2ba)	
+			------------------------------------------------------------------------------------------------
+	#> make
+
+	#> make DESTDIR=<INSTALL PATH> install
+		or
+	#> make DESTDIR=<INSTALL PATH> install-strip
+	: install and strip files			
+
+
+Run: 
+	#> ./fim <BMP PATH>
+	

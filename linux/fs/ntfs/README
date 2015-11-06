@@ -19,6 +19,9 @@ Build:
 	#> make
 
 	#> make install	DESTDIR=<INSTALL PATH>
+			or 	
+	#> make install-strip DESTDIR=<INSTALL PATH>
+	: install and strip files			
 
 
 Mount:

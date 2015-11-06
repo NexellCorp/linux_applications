@@ -27,7 +27,7 @@
 
 int  fb_open(const char *name);
 void fb_close(int fd);
-int  fb_mmap(int fd, unsigned long *base, unsigned long *len);
+int  fb_mmap(int fd, unsigned long *vaddr, unsigned long *paddr, unsigned long *len);
 void fb_munmap(unsigned long base, unsigned long len);
 int  fb_get_resol(int fd, int *width, int *height, int *pixbyte, int *buffcnt);
 int  fb_set_resol(int fd, int startx, int starty, int width, int height, int pixbyte);

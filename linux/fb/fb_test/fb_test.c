@@ -27,7 +27,8 @@ typedef struct {
 static fb_param *fb_init_par(char *path)
 {
 	fb_param *fpar;
-	unsigned long base = 0, len = 0;
+	unsigned long vaddr = 0, paddr = 0;
+	unsigned long len = 0;
 	int w = 0, h = 0, pixel = 0, bn = 1;
 	int fd;
 
@@ -42,28 +43,28 @@ static fb_param *fb_init_par(char *path)
 	}
 	memset((void*)fpar, 0, sizeof(fb_param));
 
-	if (0 > fb_mmap(fd, &base, &len))
+	if (0 > fb_mmap(fd, &vaddr, &paddr, &len))
 		goto err_fb;
 
 	if (0 > fb_get_resol(fd, &w, &h, &pixel, &bn))
 		goto err_fb;
 
 	fpar->fd = fd;
-	fpar->base = base;
+	fpar->base = vaddr;
 	fpar->length = len;
 	fpar->xresol = w;
 	fpar->yresol = h;
 	fpar->pixelbyte = pixel;
 	fpar->buffers = bn;
 
-	printf("%s: virt = 0x%08lx, %8ld (%4d * %4d, %d bpp, %d buffers)\n",
-		path, base, len, w, h, pixel, bn);
+	printf("%s: virt = 0x%lx(0x%lx), %8ld (%4d * %4d, %d bpp, %d buffers)\n",
+		path, vaddr, paddr, len, w, h, pixel, bn);
 
 	return fpar;
 
 err_fb:
-	if (base)
-		fb_munmap(base, len);
+	if (vaddr)
+		fb_munmap(vaddr, len);
 
 	if (fd >= 0)
 		fb_close(fd);

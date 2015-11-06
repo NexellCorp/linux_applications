@@ -32,12 +32,18 @@ void fb_close(int fd)
 		close(fd);
 }
 
-int fb_mmap(int fd, unsigned long *base, unsigned long *len)
+int fb_mmap(int fd, unsigned long *vaddr, unsigned long *paddr, unsigned long *len)
 {
 	void * fb_base = NULL;
 	struct fb_var_screeninfo var;
+	struct fb_fix_screeninfo fix;
 	unsigned long  fb_len;
 	__assert__(fd >= 0);
+
+	if (0 > ioctl(fd, FBIOGET_FSCREENINFO, &fix)) {
+		printf("Fail: ioctl(0x%x): %s\n", FBIOGET_FSCREENINFO, strerror(errno));
+		return -1;
+	}
 
 	if (0 > ioctl(fd, FBIOGET_VSCREENINFO, &var)) {
 		printf("Fail: ioctl(0x%x): %s\n", FBIOGET_VSCREENINFO, strerror(errno));
@@ -51,8 +57,8 @@ int fb_mmap(int fd, unsigned long *base, unsigned long *len)
 		return -1;
 	}
 
-	if (base)
-		*base = (unsigned long)fb_base;
+	if (paddr) *paddr = (unsigned long)fix.smem_start;
+	if (vaddr) *vaddr = (unsigned long)fb_base;
 
 	if (len)
 		*len = fb_len;
@@ -60,10 +66,10 @@ int fb_mmap(int fd, unsigned long *base, unsigned long *len)
 	return 0;
 }
 
-void fb_munmap(unsigned long base, unsigned long len)
+void fb_munmap(unsigned long vaddr, unsigned long len)
 {
-	if (base && len)
-		munmap((void*)base, len);
+	if (vaddr && len)
+		munmap((void*)vaddr, len);
 }
 
 int fb_get_resol(int fd, int *width, int *height, int *pixbyte, int *buffcnt)

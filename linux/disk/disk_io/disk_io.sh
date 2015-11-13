@@ -1,7 +1,5 @@
 #!/bin/sh
 
-#mount -t ext4 -o discard /dev/mioN /mnt/ftl
-
 run_io()
 {
 	while true

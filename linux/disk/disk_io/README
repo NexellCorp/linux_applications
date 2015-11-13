@@ -1,0 +1,10 @@
+example
+==============================================================
+
+FTL test>
+
+	mount -t ext4 -o discard /dev/mioN /mnt/ftl
+
+	cd /mnt/ftl
+
+	./disk_io.sh

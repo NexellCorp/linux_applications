@@ -1,0 +1,12 @@
+build
+	- arm-cortex_a9-linux-gnueabi-gcc -static -W -O2 -o hwreg_cmd hwreg_cmd.c
+
+help
+	#> hwreg_cmd -h
+
+rite:
+	#> hwreg_cmd -a <address> -w <value>
+
+Read:
+	#> hwreg_cmd -a <address> -l <read length>
+	

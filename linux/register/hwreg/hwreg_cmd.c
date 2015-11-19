@@ -92,11 +92,13 @@ int main(int argc, char **argv)
 		}
 	}
 
+	printf("support io table:\n");
+	for (i = 0; TABLE_SIZE > i; i++)
+		printf("io [%d] 0x%08x ~ 0x%08x : 0x%x\n",
+			i, IO_PHYS(io,i), (IO_PHYS(io,i)+IO_SIZE(io,i)), IO_VIRT(io, i));
+
 	if (!virt) {
-		printf("support io table:\n");
-		for (i = 0; TABLE_SIZE > i; i++)
-			printf("io [%d] 0x%08x ~ 0x%08x\n",
-				i, IO_PHYS(io,i), (IO_PHYS(io,i)+IO_SIZE(io,i)));
+		printf("Invalid address 0x%x\n", ioaddr);
 		goto _exit;
 	}
 

@@ -1,0 +1,35 @@
+build : rtc_alarm 
+	- arm-cortex_a9-linux-gnueabi-gcc -W -O2 -o  rtc_alarm rtc_alarm.c
+
+help
+	#> rtc_alarm -h
+
+	usage: options
+		-d      device name, default /dev/rtc0
+		-a      alarm time, will be occurs alarm after input sec (default 5 sec)
+		-r      set random alarm time
+		-M      set random max time (default 300 sec)
+		-m      set random min time (default 1 sec)
+		-v      verify memory size MB
+		-p      verify memory pattern (default 0~...size, 1=0xFFFFFFFF,)
+		-o      not use rtc alarm (manual operation)
+
+
+build : sleep_rtc_alarm 
+	- arm-cortex_a9-linux-gnueabi-gcc -W -O2 -o sleep_rtc_alarm sleep_rtc_alarm.c
+
+help
+	#> sleep_rtc_alarm -h
+
+	usage: options
+		-d      device name, default /dev/rtc0
+		-a      alarm time, will be occurs alarm after input sec (default 5 sec)
+		-w      wait time, after input sec, goto sleep (default 5 sec)
+		-s      goto suspend mode
+		-r      set random alarm time
+		-M      set random max time (default 300 sec)
+		-m      set random min time (default 1 sec)
+		-v      verify memory size MB
+		-p      verify memory pattern (default 0~...size, 1=0xFFFFFFFF,)
+		-o      not use rtc alarm (manual operation)
+	

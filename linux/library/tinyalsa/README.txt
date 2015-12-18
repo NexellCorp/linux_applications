@@ -15,8 +15,28 @@ TINY ALSA (Lunux)
 	Makefile : 
 
 	CROSS_COMPILE = arm-cortex_a9-linux-gnueabi-
-	------------------------------------------------------------------------------------------------
 
+	NOTE>  Static build: Refer to "Makefile.static"
+	
+		CFLAGS = -static .....
+		......
+
+			$(CROSS_COMPILE)gcc -static tinyplay.o
+			......
+			$(CROSS_COMPILE)gcc -static tinycp.o
+			......
+			$(CROSS_COMPILE)gcc -static tinymix.o
+			......
+
+
+		tinypcminfo: $(LIB) tinypcminfo.o
+			$(CROSS_COMPILE)gcc -static tinypcminfo.o mixer.o pcm.o -o tinypcminfo
+			......
+
+		$(LIB): $(OBJECTS)
+			$(CROSS_COMPILE)ar  -crv $(LIB_NAME).a $(OBJECTS)
+	------------------------------------------------------------------------------------------------
+		
 
 	#> make
 	------------------------------------------------------------------------------------------------

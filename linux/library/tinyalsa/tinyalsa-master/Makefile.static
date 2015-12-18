@@ -1,0 +1,32 @@
+CFLAGS = -static -c -fPIC -Wall
+INC = include
+OBJECTS = mixer.o pcm.o
+LIB_NAME = libtinyalsa
+LIB = $(LIB_NAME).so
+CROSS_COMPILE = arm-linux-gnueabihf-
+
+all: $(LIB) tinyplay tinycap tinymix tinypcminfo
+
+tinyplay: $(LIB) tinyplay.o
+	$(CROSS_COMPILE)gcc -static tinyplay.o -L. -ltinyalsa -o tinyplay
+
+tinycap: $(LIB) tinycap.o
+	$(CROSS_COMPILE)gcc -static tinycap.o -L. -ltinyalsa -o tinycap
+
+tinymix: $(LIB) tinymix.o
+	$(CROSS_COMPILE)gcc -static tinymix.o -L. -ltinyalsa  -o tinymix
+
+tinypcminfo: $(LIB) tinypcminfo.o
+	$(CROSS_COMPILE)gcc -static tinypcminfo.o mixer.o pcm.o -o tinypcminfo
+#	$(CROSS_COMPILE)gcc tinypcminfo.o -L. -ltinyalsa -o tinypcminfo
+
+$(LIB): $(OBJECTS)
+	$(CROSS_COMPILE)gcc -shared $(OBJECTS) -o $(LIB)
+	$(CROSS_COMPILE)ar  -crv $(LIB_NAME).a $(OBJECTS) 
+
+.c.o:
+	$(CROSS_COMPILE)gcc $(CFLAGS) $< -I$(INC)
+
+clean:
+	-rm $(LIB) $(OBJECTS) tinyplay.o tinyplay tinycap.o tinycap \
+	tinymix.o tinymix tinypcminfo.o tinypcminfo

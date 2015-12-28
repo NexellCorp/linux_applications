@@ -1,0 +1,45 @@
+
+
+	- VD echo cancel 테스트 프로그램 (PDM/I2S resampler driver 가 지원 되어야함)
+
+	구조:
+
+		[Kernel]
+		------------------------------------------------------------
+		[4ch PDM 입력(16khz)]		[4ch I2S 입력(44.1/48/96)]
+			|							|
+			|						[resampler to 16Khz]
+			|							|
+		------------------------------------------------------------
+			|							|
+		[Application]					|
+			|							|
+			----------------------------------------
+			ALSA or TinyAlsa
+			----------------------------------------
+			|							|
+		[PDM Filter]					|
+			|							|
+			[LR: 512sample]				[LR: 512sample]
+			[LR: 512sample]				[LR: 512sample]
+			----------------------------------------
+			VD echo cancel 알고리즘(libPreproc1.a)
+			----------------------------------------
+					|
+			  		[out data: LR 512sample]
+					|
+	  				[UAC 전송]
+
+
+	테스트 방법 :
+		: #> ec_test -c <PATH>
+			: <PATH> 에 pdm 출력과 pdm + I2s 를 wav 파일로 저장함.
+
+			...
+		  > r
+		  -> start capture
+		  > s
+		  -> stop   capture
+
+
+

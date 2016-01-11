@@ -5,9 +5,6 @@
 #include <sys/time.h>
 #include <unistd.h>
 
-extern "C" {
-#include "libPreproc1.h"
-}
 
 //#define CLEAR_BUFFER
 #define USING_RANDOM
@@ -86,8 +83,10 @@ int main(void)
 
 
 	aec_mono_init();
+	printf(" TEST AEC LOOP \n");
 
-	for (lp = 0; lp < LOOPCOUNT; lp++) {
+//	for (lp = 0; lp < LOOPCOUNT; lp++) {
+	for (;;) {
 		struct timeval tv1, tv2;
 		long us, ms;
 		int i;
@@ -141,7 +140,9 @@ int main(void)
 			t_max = ms;
 		t_tot += ms;
 
-		printf("  %6ld msec\n", ms);
+		usleep(10*1000);
+		gettimeofday(&tv2, NULL);
+		printf("  %6ld msec [%6d.%06d]\n", ms, tv2.tv_sec, tv2.tv_usec);
 	}
 
 	printf("test loop  : %d\n", lp);

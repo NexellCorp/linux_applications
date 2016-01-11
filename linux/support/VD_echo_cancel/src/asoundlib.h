@@ -26,8 +26,8 @@
 ** DAMAGE.
 */
 
-#ifndef ASOUNDLIB_H
-#define ASOUNDLIB_H
+#ifndef CASOUNDLIB_H
+#define CASOUNDLIB_H
 
 #include <sys/time.h>
 #include <stddef.h>
@@ -233,4 +233,4 @@ int mixer_ctl_get_range_max(struct mixer_ctl *ctl);
 }  /* extern "C" */
 #endif
 
-#endif
+#endif	/* CASOUNDLIB_H */

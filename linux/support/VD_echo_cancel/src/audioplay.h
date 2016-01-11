@@ -1,5 +1,3 @@
-#define	TINY_ALSA
-
 #ifdef 	TINY_ALSA
 #include "tinyalsa_asoundlib.h"
 #else
@@ -19,19 +17,15 @@ public:
 	virtual ~CAudioPlayer(void);
 
 public:
-#ifdef TINY_ALSA
-	bool Open(int card, int device,
-				int channel, unsigned int samplerate, int samplebits,
+	bool Open(const char *pcm_name, int card, int device,
+				int channel, int samplerate, int samplebits,
 				int periods, int periodbytes);
-#else
-	bool Open(const char *pcm_name,
-				int channel, unsigned int samplerate,
-				int periods, int periodbytes);
-#endif
+
 	void Close(void);
-	int  Capture(void *buffer, int size);
-	int  PlayBack(void *buffer, int size);
+	int  Capture (unsigned char *buffer, int bytes);
+	int  PlayBack(unsigned char *buffer, int bytes);
 	void Stop(bool drop);
+	void Stop(void);
 
 	int  GetChannels(void);
 	int  GetSamplRate(void);
@@ -57,6 +51,8 @@ private:
 	snd_pcm_stream_t m_Stream;
 	snd_pcm_uframes_t 	m_PeriodBytes, m_ReqPeriodBytes;
 #endif
+	char m_pcmName[256];
+
 	unsigned int m_Channels, m_ReqChannel;
 	unsigned int m_SampleRate, m_ReqSampleRate;
 	unsigned int m_Periods, m_ReqPeriods;

@@ -1,6 +1,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "audioplay.h"
 
 #ifdef TINY_ALSA
@@ -18,8 +19,8 @@ CAudioPlayer::~CAudioPlayer(void)
 		Close();
 }
 
-bool CAudioPlayer::Open(int card, int device,
-					int channels, unsigned int samplerate, int samplebits,
+bool CAudioPlayer::Open(const char *pcm_name, int card, int device,
+					int channels, int samplerate, int samplebits,
 					int periods, int periodbytes)
 {
     m_PCMConfig.channels = channels;
@@ -27,8 +28,8 @@ bool CAudioPlayer::Open(int card, int device,
     m_PCMConfig.period_size = periodbytes/(channels*(samplebits/8));
     m_PCMConfig.period_count = periods;
 
-	printf("%s card.%d device.%d sample ch.%d, %d hz, %d bits, period bytes %d(%d), periods %d \n",
-		m_Stream == PCM_OUT ? "Playing":"Capturing",
+	printf("%s %s card:%d.%d sample ch.%d, %d hz, %d bits, period bytes %d(%d), periods %d \n",
+		pcm_name, m_Stream == PCM_OUT ? "Playing":"Capturing",
 		card, device, channels, samplerate,
 		samplebits, periodbytes, m_PCMConfig.period_size, periods);
 
@@ -55,13 +56,18 @@ bool CAudioPlayer::Open(int card, int device,
         return false;
     }
 
+	if (pcm_name && strlen(pcm_name))
+		strcpy(m_pcmName, pcm_name);
+
 	m_Card = card;
 	m_Device = device;
 	m_Channels = channels;
+	m_SampleRate = samplerate;
     m_SampleBits = samplebits;
     m_PeriodBytes = periodbytes;
     m_Periods = periods;
 	m_FrameBytes = channels*(samplebits/8);
+	return true;
 }
 
 void CAudioPlayer::Close(void)
@@ -71,23 +77,27 @@ void CAudioPlayer::Close(void)
 	m_hPCM = NULL;
 }
 
-int CAudioPlayer::Capture(void *buffer, int size)
+int CAudioPlayer::Capture(unsigned char *buffer, int bytes)
 {
-	int ret = pcm_read(m_hPCM, buffer, size);
+	int ret = pcm_read(m_hPCM, buffer, bytes);
 	if (ret)
     	return -1;
-    return size;
+    return bytes;
 }
 
-int CAudioPlayer::PlayBack(void *buffer, int size)
+int CAudioPlayer::PlayBack(unsigned char *buffer, int bytes)
 {
-	int ret = pcm_write(m_hPCM, buffer, size);
+	int ret = pcm_write(m_hPCM, buffer, bytes);
 	if (ret)
     	return -1;
-	return size;
+	return bytes;
 }
 
 void CAudioPlayer::Stop(bool drop)
+{
+}
+
+void CAudioPlayer::Stop(void)
 {
 }
 
@@ -167,8 +177,8 @@ CAudioPlayer::~CAudioPlayer(void)
 		Close();
 }
 
-bool CAudioPlayer::Open(const char *pcm_name,
-					int channels, unsigned int samplerate,
+bool CAudioPlayer::Open(const char *pcm_name, int card, int device,
+					int channels, int samplerate, int samplebits,
 					int periods, int periodbytes)
 {
 	snd_pcm_uframes_t start_threshold;
@@ -294,8 +304,10 @@ bool CAudioPlayer::Open(const char *pcm_name,
   	  		return false;
   		}
 	}
-
 	snd_pcm_hw_params_free(m_pHWParam);
+
+	if (pcm_name && strlen(pcm_name))
+		strcpy(m_pcmName, pcm_name);
 
 	return true;
 }
@@ -309,9 +321,9 @@ void CAudioPlayer::Close(void)
   	m_hPCM = NULL;
 }
 
-int CAudioPlayer::Capture(void *buffer, int size)
+int CAudioPlayer::Capture(unsigned char *buffer, int bytes)
 {
-	int framesize = size/m_FrameBytes;
+	int framesize = bytes/m_FrameBytes;
 	int err;
 
 	if (NULL == m_hPCM)
@@ -326,10 +338,10 @@ int CAudioPlayer::Capture(void *buffer, int size)
 }
 
 #if 1
-int CAudioPlayer::PlayBack(void *buffer, int size)
+int CAudioPlayer::PlayBack(unsigned char *buffer, int bytes)
 {
 	snd_pcm_sframes_t avail, delay;
-	int framesize = size/m_FrameBytes;
+	int framesize = bytes/m_FrameBytes;
 	int err;
 
 	if (NULL == m_hPCM)
@@ -349,10 +361,10 @@ int CAudioPlayer::PlayBack(void *buffer, int size)
 	return err;
 }
 #else
-int CAudioPlayer::PlayBack(void *buffer, int size)
+int CAudioPlayer::PlayBack(unsigned char *buffer, int bytes)
 {
 	snd_pcm_sframes_t avail, delay;
-	int framesize = size/m_FrameBytes;
+	int framesize = bytes/m_FrameBytes;
 	int err;
 
 	if (NULL == m_hPCM)
@@ -391,6 +403,11 @@ void CAudioPlayer::Stop(bool drop)
 		snd_pcm_drop(m_hPCM);
 	else
 		snd_pcm_drain(m_hPCM);
+}
+
+void CAudioPlayer::Stop(void)
+{
+	Stop(true);
 }
 
 int CAudioPlayer::GetChannels(void)
@@ -481,7 +498,7 @@ void CAudioPlayer::DumpHwParams(void)
 	printf("Frame Bytes : %d\n", m_FrameBytes);
 	printf("Periods     : %d (%d~%d) - R %d\n", periods, periods_min, periods_max, m_Periods);
 	printf("Period Byte : %d (%d~%d) - R %d\n",
-		(int)period_size, (int)period_size_min, (int)period_size_max, m_PeriodBytes);
+		(int)period_size, (int)period_size_min, (int)period_size_max, (int)m_PeriodBytes);
 	printf("Buffer Byte : %d\n", periods * (unsigned int)period_size);
 	printf("=========================================\n");
 }

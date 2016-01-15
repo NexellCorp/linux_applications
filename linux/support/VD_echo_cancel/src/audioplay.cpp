@@ -4,6 +4,12 @@
 #include <string.h>
 #include "audioplay.h"
 
+#ifdef  DEBUG
+#define	pr_debug(m...)	printf(m)
+#else
+#define	pr_debug(m...)
+#endif
+
 #ifdef TINY_ALSA
 CAudioPlayer::CAudioPlayer(enum AUDIO_STREAM_DIR stream)
 	: m_hPCM(NULL)
@@ -28,7 +34,7 @@ bool CAudioPlayer::Open(const char *pcm_name, int card, int device,
     m_PCMConfig.period_size = periodbytes/(channels*(samplebits/8));
     m_PCMConfig.period_count = periods;
 
-	printf("%s %s card:%d.%d sample ch.%d, %d hz, %d bits, period bytes %d(%d), periods %d \n",
+	pr_debug("%s %s card:%d.%d ch.%d, %d hz, %d bits, period bytes %d(%d), periods %d \n",
 		pcm_name, m_Stream == PCM_OUT ? "Playing":"Capturing",
 		card, device, channels, samplerate,
 		samplebits, periodbytes, m_PCMConfig.period_size, periods);
@@ -50,9 +56,11 @@ bool CAudioPlayer::Open(const char *pcm_name, int card, int device,
 
     m_hPCM = pcm_open(card, device, m_Stream, &m_PCMConfig);
     if (!m_hPCM || !pcm_is_ready(m_hPCM)) {
-  	  printf("E: %s Unable to open card %d PCM device %d (%s)\n",
-  	           	m_Stream == PCM_OUT ? "Playing":"Capturing",
-				card, device, pcm_get_error(m_hPCM));
+  		printf("E: %s Unable to open card %d.%d ch.%d, %d hz, %d bits period %d(%d) bytes, periods %d\n",
+			m_Stream == PCM_OUT ? "Playing":"Capturing",
+			card, device, channels, samplerate, samplebits,
+			periodbytes, m_PCMConfig.period_size, periods);
+		printf("E:%s\n", pcm_get_error(m_hPCM));
         return false;
     }
 
@@ -67,6 +75,7 @@ bool CAudioPlayer::Open(const char *pcm_name, int card, int device,
     m_PeriodBytes = periodbytes;
     m_Periods = periods;
 	m_FrameBytes = channels*(samplebits/8);
+
 	return true;
 }
 
@@ -79,14 +88,23 @@ void CAudioPlayer::Close(void)
 
 int CAudioPlayer::Capture(unsigned char *buffer, int bytes)
 {
+	if (NULL == m_hPCM)
+		return 0;
+
 	int ret = pcm_read(m_hPCM, buffer, bytes);
-	if (ret)
+	if (ret) {
+		printf("E:%s, %s %s\n", m_Stream == PCM_OUT ? "Playing":"Capturing",
+			m_pcmName, pcm_get_error(m_hPCM));
     	return -1;
+    }
     return bytes;
 }
 
 int CAudioPlayer::PlayBack(unsigned char *buffer, int bytes)
 {
+	if (NULL == m_hPCM)
+		return 0;
+
 	int ret = pcm_write(m_hPCM, buffer, bytes);
 	if (ret)
     	return -1;

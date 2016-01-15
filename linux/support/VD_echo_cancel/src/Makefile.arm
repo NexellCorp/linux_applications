@@ -8,30 +8,31 @@ CROSS_COMPILE := arm-linux-gnueabihf-
 CC  = $(CROSS_COMPILE)gcc
 CPP = $(CROSS_COMPILE)g++
 
-CFLAGS  :=  -Wall -std=c++11 
+CFLAGS  :=  -Wall -std=c++11
 CFLAGS  +=  -mfloat-abi=hard
-CFLAGS  += -DTINY_ALSA 
+CFLAGS  += -DTINY_ALSA
 CFLAGS  += -DSUPPORT_AEC_PCMOUT
-
 
 ifeq ($(DEBUG),y)
 CFLAGS  += -g
-CFLAGS  += -fno-omit-frame-pointer 
-CFLAGS  += -fstack-protector-all
-LDFLAGS += -rdynamic # '-rdynamic' or '-Wl,export-dynamic' 
+#CFLAGS  += -fno-omit-frame-pointer
+#CFLAGS  += -fstack-protector-all
+LDFLAGS += -rdynamic # '-rdynamic' or '-Wl,export-dynamic'
 LDFLAGS += -static
 else
-CFLAGS  += -O3 
-CFLAGS  += -fomit-frame-pointer 
+CFLAGS  += -O3
+CFLAGS  += -fomit-frame-pointer
 endif
 
-COBJS	:=
-CPPOBJS	:= ec_test.o audioplay.o nx_agc_new.o nx_pdm.o PDM_LPF.o
-LIBS	:= libPreproc1.a
-LIBS	+= libtinyalsa.a
-LIBS	+= -lpthread 
-LIBS	+= -lm 
+LIBS	:= ../lib/libPreproc1.a
+LIBS	+= ../lib/libtinyalsa.a
+LIBS	+= ../lib/libagcpdm.a
+LIBS	+= -lpthread
+LIBS	+= -lm
 #LIBS	+= -lasound
+
+COBJS	:=
+CPPOBJS	:= ec_test.o audioplay.o
 OBJS	:= $(COBJS) $(CPPOBJS)
 
 TARGET = ec_test

@@ -13,7 +13,7 @@
 #include "../lib/nx_pdm.h"
 
 extern "C" {
-#include "libPreproc1.h"
+#include "../lib/libPreproc1.h"
 }
 
 //#define	DEBUG
@@ -629,16 +629,18 @@ __STATIC__ void *audio_playback(void *data)
 				IS_EMPTY(pIBuf[i]);
 		#endif
 		}
-
+#if 1
 		/*
 		 * save to file MIXED PDM0/1 & I2S0/1
 		 */
 		if (b_FileSave) {
 			short *d  = (short *)In_SYNC;
-			short *s0 = (short *)In_Buf[0];	// INP: PDM0
-			short *s1 = (short *)In_Ref[1];	// INP: PDM
-			short *s2 = (short *)In_Buf[0];	// REF: I2S0
-			short *s3 = (short *)In_Ref[1];	// REF: I2S1
+			short *s0 = (short *)In_Buf[0];	// PDM
+			short *s1 = (short *)In_Ref[0];	// I2S
+			short *s2 = (short *)In_Buf[1];	// PDM
+			short *s3 = (short *)In_Ref[1];	// REF
+
+			s1++, s3++;	/* for Right channel */
 			for (i = 0; aec_buf_bytes > i; i += 4) {
 				*d++ = *s0++, s0++;
 				*d++ = *s1++, s1++;
@@ -648,7 +650,7 @@ __STATIC__ void *audio_playback(void *data)
 			assert(0 == ((int)d - (int)In_SYNC) - sizeof(In_SYNC));
 			pSIWav->Write((void*)In_SYNC, aec_buf_bytes*2);
 		}
-
+#endif
 		/*
 		 * AEC preprocessing
 		 */

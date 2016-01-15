@@ -5,6 +5,12 @@
 #include <unistd.h>
 #include "audioplay.h"
 
+#ifdef  DEBUG
+#define	pr_debug(m...)	printf(m)
+#else
+#define	pr_debug(m...)
+#endif
+
 #define	DUMMY_STREAM_TIME_MS	30
 
 CAudioPlayer::CAudioPlayer(enum AUDIO_STREAM_DIR stream)
@@ -30,7 +36,7 @@ bool CAudioPlayer::Open(const char *pcm_name, int card, int device,
     m_PCMConfig.period_size = periodbytes/(channels*(samplebits/8));
     m_PCMConfig.period_count = periods;
 
-	printf("%s %s card:%d.%d sample ch.%d, %d hz, %d bits, period bytes %d(%d), periods %d \n",
+	pr_debug("%s %s card:%d.%d ch.%d, %d hz, %d bits, period bytes %d(%d), periods %d \n",
 		pcm_name, m_Stream == PCM_OUT ? "Playing":"Capturing",
 		card, device, channels, samplerate,
 		samplebits, periodbytes, m_PCMConfig.period_size, periods);
@@ -40,9 +46,10 @@ bool CAudioPlayer::Open(const char *pcm_name, int card, int device,
     else if (samplebits == 16)
         m_PCMConfig.format = PCM_FORMAT_S16_LE;
 	else {
-  	  printf("E: %s Unable to sample bits %d for card %d device %d\n",
-  	           	m_Stream == PCM_OUT ? "Playing":"Capturing",
-  	           	samplebits, card, device);
+  		printf("E: %s Unable to open card %d.%d ch.%d, %d hz, %d bits period %d(%d) bytes, periods %d\n",
+			m_Stream == PCM_OUT ? "Playing":"Capturing",
+			card, device, channels, samplerate, samplebits,
+			periodbytes, m_PCMConfig.period_size, periods);
         return false;
 	}
 

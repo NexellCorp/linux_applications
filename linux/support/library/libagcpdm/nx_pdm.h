@@ -18,7 +18,6 @@ void PDM_LPF_Run ( pdmLPF_STATDEF *lpf_st, short *pOutBuf, short *pInBuf, int le
 /*    Static Variables           */
 /*-------------------------------*/
 typedef  struct   {
-	unsigned int		start_sign;
 	int 				frames		;
 	long int 			sum 		;
 	int 				iGain 		;
@@ -27,7 +26,6 @@ typedef  struct   {
 	int 				dc_offset	;
 	int 				sum_table[20];
 	pdmLPF_STATDEF 		lpf_st 		;
-	unsigned int		end_sign;
 } agc_STATDEF ;
 
 #define	START_AGC_SIGN	0x12345678
@@ -55,6 +53,10 @@ void  agc_Run (
 );
 #endif
 
+void  agc_Run2 (
+	agc_STATDEF  	*agc_st,		// address of the stativ variable structure
+	short 			*ioBuf			// signal
+);
 /***************************************************************************************/
 
 typedef struct {

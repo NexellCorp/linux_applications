@@ -7,6 +7,7 @@
 CROSS_COMPILE := arm-linux-gnueabihf-
 CC  = $(CROSS_COMPILE)gcc
 CPP = $(CROSS_COMPILE)g++
+AR  = $(CROSS_COMPILE)ar
 
 CFLAGS  :=  -Wall -std=c++11
 CFLAGS  +=  -mfloat-abi=hard

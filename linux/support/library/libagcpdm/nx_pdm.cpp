@@ -40,7 +40,7 @@ void pdm_Run (
 	// CIC filter
 	//-------------------------------------------------------------------------
 	{
-		int value32 = 0, value;
+		int value32 = 0, value, value2;
 
 		for (int i=0; i<SAMPLE_LENGTH_PDM; i++)
 		{
@@ -50,7 +50,10 @@ void pdm_Run (
 				pdm_st->Delta2[j] = pdm_st->Delta1[j] - pdm_st->OldDelta1[j];
 				pdm_st->Delta3[j] = pdm_st->Delta2[j] - pdm_st->OldDelta2[j];
 				pdm_st->Delta4[j] = pdm_st->Delta3[j] - pdm_st->OldDelta3[j];
-				CICResult[j][i] = (int)(pdm_st->Delta4[j] - pdm_st->OldDelta4[j])>>13;
+				value2 = (int)(pdm_st->Delta4[j] - pdm_st->OldDelta4[j])>>13;
+				if (value2>32767) 			CICResult[j][i] = 32767;
+				else if (value2<-32768) 	CICResult[j][i] = -32768;
+				else 						CICResult[j][i] = value2;
 				pdm_st->OldSigma5[j]= pdm_st->Sigma5[j];
 				pdm_st->OldDelta1[j]= pdm_st->Delta1[j];
 				pdm_st->OldDelta2[j]= pdm_st->Delta2[j];
@@ -110,10 +113,10 @@ void pdm_Run (
 	// LPF & AGC
 	//-------------------------------------------------------------------------
 #if 1
-	agc_Run( &pdm_st->agc_st[0], CICResult[0], agc_dB );
-	agc_Run( &pdm_st->agc_st[1], CICResult[1], agc_dB );
-	agc_Run( &pdm_st->agc_st[2], CICResult[2], agc_dB );
-	agc_Run( &pdm_st->agc_st[3], CICResult[3], agc_dB );
+	agc_Run ( &pdm_st->agc_st[0], CICResult[0], agc_dB );
+	agc_Run2( &pdm_st->agc_st[1], CICResult[1] );
+	agc_Run2( &pdm_st->agc_st[2], CICResult[2] );
+	agc_Run2( &pdm_st->agc_st[3], CICResult[3] );
 #endif
 	//-------------------------------------------------------------------------
 	// LPF & AGC

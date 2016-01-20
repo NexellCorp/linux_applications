@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include "audioplay.h"
 
 #ifdef  DEBUG
@@ -11,6 +12,23 @@
 #endif
 
 #ifdef TINY_ALSA
+
+struct pcm {
+    int fd;
+    unsigned int flags;
+    int running:1;
+    int underruns;
+    unsigned int buffer_size;
+    unsigned int boundary;
+    char error[128];
+    struct pcm_config config;
+    struct snd_pcm_mmap_status *mmap_status;
+    struct snd_pcm_mmap_control *mmap_control;
+    struct snd_pcm_sync_ptr *sync_ptr;
+    void *mmap_buffer;
+    unsigned int noirq_frames_per_msec;
+};
+
 CAudioPlayer::CAudioPlayer(enum AUDIO_STREAM_DIR stream)
 	: m_hPCM(NULL)
 	, m_Channels(2)
@@ -111,12 +129,37 @@ int CAudioPlayer::PlayBack(unsigned char *buffer, int bytes)
 	return bytes;
 }
 
-void CAudioPlayer::Stop(bool drop)
+int CAudioPlayer::Start(void)
 {
+	if (NULL == m_hPCM)
+		return -1;
+
+	struct pcm *pcm = m_hPCM;
+	int ret = pcm_start(pcm);
+    if (0 > ret)
+  	 	printf("E: cannot start channel <%s> (%s) ...\n",
+  	           m_pcmName, pcm_get_error(pcm));
+
+    return ret;
 }
 
-void CAudioPlayer::Stop(void)
+int CAudioPlayer::Stop(bool drop)
 {
+	if (NULL == m_hPCM)
+		return -1;
+
+	struct pcm *pcm = m_hPCM;
+	int ret = pcm_stop(pcm);
+    if (0 > ret)
+  	 	printf("E: cannot stop channel <%s> (%s) ...\n",
+  	           m_pcmName, pcm_get_error(pcm));
+
+    return ret;
+}
+
+int CAudioPlayer::Stop(void)
+{
+	return Stop(true);
 }
 
 int CAudioPlayer::GetChannels(void)
@@ -412,20 +455,25 @@ int CAudioPlayer::PlayBack(unsigned char *buffer, int bytes)
 }
 #endif
 
-void CAudioPlayer::Stop(bool drop)
+int CAudioPlayer::Start(void)
 {
 	if (NULL == m_hPCM)
-		return;
+		return 0;
 
-	if (true == drop)
-		snd_pcm_drop(m_hPCM);
-	else
-		snd_pcm_drain(m_hPCM);
+	return snd_pcm_start(m_hPCM);;
 }
 
-void CAudioPlayer::Stop(void)
+int CAudioPlayer::Stop(bool drop)
 {
-	Stop(true);
+	if (NULL == m_hPCM)
+		return -1;
+
+	return true == drop ? snd_pcm_drop(m_hPCM) : snd_pcm_drain(m_hPCM);
+}
+
+int CAudioPlayer::Stop(void)
+{
+	return Stop(true);
 }
 
 int CAudioPlayer::GetChannels(void)

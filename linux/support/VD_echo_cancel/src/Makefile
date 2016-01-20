@@ -20,8 +20,8 @@ CFLAGS  += -fstack-protector-all
 LDFLAGS += -rdynamic # '-rdynamic' or '-Wl,export-dynamic'
 LDFLAGS += -static
 else
-CFLAGS  += -O3
-CFLAGS  += -fomit-frame-pointer
+CFLAGS  += -O2
+CFLAGS  += -fno-omit-frame-pointer
 endif
 
 LIBS	:= ../lib/libPreproc1.a

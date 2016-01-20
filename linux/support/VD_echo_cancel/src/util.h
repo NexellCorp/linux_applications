@@ -27,15 +27,15 @@ struct list_entry {
     struct list_entry *next, *prev;
     void *data;
 };
-#define LIST_HEAD_INIT(name) { &(name), &(name), NULL }
+#define LIST_HEAD_INIT(name, data) { &(name), &(name), data }
 #define list_for_each(pos, head) \
     for (pos = (head)->next; pos != (head); pos = pos->next)
 
-__STATIC__ inline void INIT_LIST_HEAD(struct list_entry *list)
+__STATIC__ inline void INIT_LIST_HEAD(struct list_entry *list, void *data)
 {
     list->next = list;
     list->prev = list;
-    list->data = NULL;
+    list->data = data;
 }
 
 __STATIC__ inline void __list_add(struct list_entry *list,
@@ -46,124 +46,10 @@ __STATIC__ inline void __list_add(struct list_entry *list,
 }
 
 /* add to tail */
-__STATIC__ inline void list_add(struct list_entry *list,
-					struct list_entry *head, void *data)
+__STATIC__ inline void list_add(struct list_entry *list, struct list_entry *head)
 {
-	list->data = data;
 	__list_add(list, head->prev, head);
 }
-
-/***************************************************************************************/
-#ifdef SUPPORT_RATE_DETECTOR
-#include <poll.h>
-#include <sys/socket.h>
-#include <sys/un.h>
-#include <linux/netlink.h>
-
-struct udev_message {
-	const char *action;
-    const char *devpath;
-    const char *devnode;
-    int sample_rate;
-};
-
-#define AUDIO_UEVENT_MESSAGE	"SAMPLERATE_CHANGED"
-
-__STATIC__ int audio_uevent_init(void)
-{
-    struct sockaddr_nl addr;
-    int sz = 64*1024;
-    int fd;
-
-    memset(&addr, 0, sizeof(addr));
-    addr.nl_family = AF_NETLINK;
-    addr.nl_pid = getpid();
-    addr.nl_groups = 0xffffffff;
-
-    fd = socket(PF_NETLINK, SOCK_DGRAM, NETLINK_KOBJECT_UEVENT);
-    if(0 > fd)
-        return -EINVAL;
-
-    setsockopt(fd, SOL_SOCKET, SO_RCVBUFFORCE, &sz, sizeof(sz));
-    if (0 > bind(fd, (struct sockaddr *) &addr, sizeof(addr))) {
-        close(fd);
-        return -EINVAL;
-    }
-
-    return fd;
-}
-
-__STATIC__ void audio_uevent_close(int fd)
-{
- 	close(fd);
-}
-
-__STATIC__ int audio_uevent_event(int fd, char* buffer, int length)
-{
-	struct pollfd fds;
-    int n, count;
-
-     do {
-    	fds.fd = fd;
-        fds.events = POLLIN;
-        fds.revents = 0;
-        n = poll(&fds, 1, -1);
-        if(n > 0 && POLLIN == fds.revents) {
-            count = recv(fd, buffer, length, 0);
-            if (count > 0)
-                return count;
-        }
-    } while (1);
-
-	// won't get here
-    return 0;
-}
-
-__STATIC__ void audio_uevent_parse(const char *msg, struct udev_message *udev)
-{
-	const char *idx = NULL;
-
-    udev->action = "";
-    udev->devpath = "";
-    udev->devnode = "";
-    udev->sample_rate = 0;
-
-        /* currently ignoring SEQNUM */
-    while(*msg) {
-    	#if 0
-    	idx = "ACTION=";
-        if(!strncmp(msg, idx, strlen(idx))) {
-            msg += strlen(idx);
-            udev->action = msg;
-        }
-
-        idx = "DEVPATH=";
-        if(!strncmp(msg, idx, strlen(idx))) {
-            msg += strlen(idx);
-            udev->devpath = msg;
-        }
-
-        idx = "DEVNAME=";
-        if(!strncmp(msg, idx, strlen(idx))) {
-            msg += strlen(idx);
-            udev->devnode = msg;
-        }
-		#endif
-		idx = "SAMPLERATE_CHANGED=";
-        if(!strncmp(msg, idx, strlen(idx))) {
-            msg += strlen(idx);
-            udev->sample_rate = strtoll(msg, NULL, 10);
-        }
-
-        /* advance to after the next \0 */
-        while(*msg++)
-            ;
-    }
-
-	if (!strlen(udev->action))
-		return;
-}
-#endif
 
 /***************************************************************************************/
 #if 0

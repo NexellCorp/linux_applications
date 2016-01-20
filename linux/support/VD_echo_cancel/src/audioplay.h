@@ -24,8 +24,9 @@ public:
 	void Close(void);
 	int  Capture (unsigned char *buffer, int bytes);
 	int  PlayBack(unsigned char *buffer, int bytes);
-	void Stop(bool drop);
-	void Stop(void);
+	int  Start(void);
+	int  Stop (bool drop);
+	int  Stop (void);
 
 	int  GetChannels(void);
 	int  GetSamplRate(void);

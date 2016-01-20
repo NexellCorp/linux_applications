@@ -39,9 +39,17 @@ public:
 
 	 CWAVFile(void) {
 	 		m_hFile = NULL;
+	 		m_SavePeriodBytes = 0;
+	 		m_SavePeriodAvail = 0;
 	 		memset(m_strName, 0, sizeof(m_strName));
 	 }
 
+	 CWAVFile(long save_period_size) {
+	 		m_hFile = NULL;
+	 		m_SavePeriodBytes = save_period_size;
+	 		m_SavePeriodAvail = save_period_size;
+	 		memset(m_strName, 0, sizeof(m_strName));
+	 }
 public:
 
 	bool	Open(bool wavformat, int channels, int samplerate, int samplebits, const char *fmt, ...)
@@ -115,18 +123,34 @@ public:
 		}
 
 		m_WriteBytes += size;
+
+		if (m_bWavFormat && m_SavePeriodBytes) {
+			m_SavePeriodAvail -= m_WriteBytes;
+			if (0 > m_SavePeriodAvail) {
+				struct wav_header *header = &m_WavHeader;
+				long long frames;
+
+				frames = m_WriteBytes / ((m_SampleBits / 8) * m_Channels);
+    			header->data_sz = frames * header->block_align;
+    			header->riff_sz = header->data_sz + sizeof(header) - 8;
+	    		fseek(m_hFile, 0, SEEK_SET);
+    			fwrite(header, sizeof(struct wav_header), 1, m_hFile);
+    			fseek(m_hFile, 0, SEEK_END);
+				m_SavePeriodAvail = m_SavePeriodBytes;
+			}
+		}
 		return true;
 	}
 
 	void	Close(void)
 	{
 		struct wav_header *header = &m_WavHeader;
-		unsigned long frames;
+		long long frames;
 
 		if (NULL == m_hFile)
 			return;
 
-		printf("%s close: %s %u ch, %d hz, %u bits, %lu bytes ",
+		printf("%s close: %s %u ch, %d hz, %u bits, %llu bytes ",
 			m_bWavFormat?"WAV":"RAW", m_strName, m_Channels, m_SampleRate,
 			m_SampleBits, m_WriteBytes);
 
@@ -144,16 +168,23 @@ public:
 
     	m_hFile = NULL;
     	m_WriteBytes = 0;
+    	m_SavePeriodAvail = 0;
+
+		memset(m_strName, 0, sizeof(m_strName));
+
     	printf("[done]\n");
 	}
 
 private:
 	FILE *m_hFile;
 	struct wav_header m_WavHeader;
+
 	char m_strName[512];
-	unsigned long m_WriteBytes;
+	long long m_WriteBytes;
 	int  m_Channels, m_SampleRate, m_SampleBits;
 	bool m_bWavFormat;
+	long long m_SavePeriodBytes;
+	long long m_SavePeriodAvail;
 };
 
 /***************************************************************************************/
@@ -209,7 +240,7 @@ static int write_wave(FILE *file, void *buffer, int size)
 static void close_wave(FILE *file, struct wav_header *header,
 				int channels, int bits, unsigned long bytes)
 {
-	unsigned long frames;
+	long long frames;
 
 	if (NULL == file || bits == 0 || channels == 0)
 		return;

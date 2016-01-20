@@ -22,6 +22,14 @@ extern "C" {
 #else
 #define	pr_debug(m...)
 #endif
+/***************************************************************************************/
+//#define SUPPORT_PDM_IN_DUMP
+#define SUPPORT_PDM_AGC
+//#define DEF_PDM_DUMP_RUN
+
+/* check SUPPORT_RATE_DETECTOR */
+#define SUPPORT_RATE_DETECTOR
+/***************************************************************************************/
 
 /*
 		<< PDM ouput: TH3 >>			<< PDM Transfer: TH4 >>				 		 << PLAY BACK: TH0 >>
@@ -98,8 +106,11 @@ extern "C" {
 #define	PCM_PDM_TR_OUT_BYTES	(2048)
 #define	PCM_PDM_TR_OUT_SIZE		((PCM_PDM_PERIOD_BYTES*PCM_PDM_PERIOD_SIZE)/ PCM_PDM_TR_OUT_BYTES) /* 160  PCM_PDM_PERIOD_BYTES * PCM_PDM_PERIOD_SIZE == PCM_PDM_TR_OUT_BYTES * PCM_PDM_TR_OUT_SIZE */
 
-#define	PCM_I2S_PERIOD_BYTES	8192
-#define	PCM_I2S_PERIOD_SIZE		16
+#define	PCM_I2S_PERIOD_BYTES	4096	// 8192, 4096
+#define	PCM_I2S_PERIOD_SIZE		32		// 16, 32
+
+#define	PCM_UAC_PERIOD_BYTES	4096	// 8192, 4096
+#define	PCM_UAC_PERIOD_SIZE		32		// 16, 32
 
 #define NR_THREADS  			10
 #define NR_QUEUEBUFF  			10
@@ -108,13 +119,11 @@ extern "C" {
 #define	STREAM_BUFF_SIZE_MULTI	(2)
 
 #define RUN_CPUFREQ_KHZ			1200000
+#define WAV_SAVE_PERIOD			(512*1024)		/* 51Kbyte */
+#define STREAM_MONITOR_PERIOD	(3*1000*1000)	/* US */
+#define	PCM_I2S_START_RATE		(16000)			/* For detect */
 
-//#define SUPPORT_PDM_AGC_IN
-#define SUPPORT_PDM_AGC
-//#define SUPPORT_RATE_DETECTOR
-#define SUPPORT_PDM_AGC
-#define DEF_PDM_DUMP_RUN
-
+#include "uevent.h"
 /***************************************************************************************/
 #define	__STATIC__	static
 
@@ -122,24 +131,23 @@ extern "C" {
 #define	STREAM_PLAYBACK			(0)
 #define	STREAM_CAPTURE_I2S		(1<<1)
 #define	STREAM_CAPTURE_PDM		(1<<2)
-#define	STREAM_TRANS_PDM		(1<<3)
+#define	STREAM_TRANS_CAPT		(1<<3)
+#define	STREAM_TRANS_PDM		(1<<4)
 
-#define	CMD_EXIT				(1<<0)
-#define	CMD_EC_PROCESS			(1<<1)
-#define	CMD_EC_DEBUG			(1<<2)
-#define	CMD_AEC_PROCESS			(1<<3)
-#define	CMD_REINIT				(1<<4)
-#define	CMD_CAPT_PDM			(1<<5)
-#define	CMD_CAPT_RUN			(1<<6)
-#define	CMD_CAPT_STOP			(1<<7)
-#define	CMD_CAPTURE_WAVF		(1<<8)
+#define	CMD_STREAM_EXIT			(1<<0)
+#define	CMD_STREAM_REINIT		(1<<1)
+#define	CMD_STREAM_NODATA		(1<<2)
+#define	CMD_CAPT_RUN			(1<<3)
+#define	CMD_CAPT_STOP			(1<<4)
+#define	CMD_CAPT_PDMOUT			(1<<5)
+#define	CMD_CAPT_RAWFORM		(1<<6)
+#define	CMD_AEC_PROCESS			(1<<7)
 
 struct audio_stream {
 	const char *pcm_name;	/* for ALSA */
 	int card;				/* for TINYALSA */
 	int device;				/* for TINYALSA */
 	char file_path[256];
-	pthread_t thread;
 	pthread_mutex_t lock;
 	bool is_valid;
 	unsigned int type;
@@ -149,12 +157,14 @@ struct audio_stream {
 	int	 periods;
 	int	 period_bytes;
 	unsigned int command;
-	void *qbuf;	/* for PDM */
-	void *(*fnc)(void *);	/* thread functioin */
-	struct list_entry *Head;
+	void *(*func)(void *);		/* thread functioin */
+	struct list_entry  in_stream;
+	struct list_entry  stream;	/* this stream */
+	void *qbuf;
 	CWAVFile *WavFile[5];
 	int wav_files;
 	bool rate_changed;
+	char dbg_message[256];
 };
 
 #define	CH_2	2
@@ -163,6 +173,8 @@ struct audio_stream {
 #define	SAMPLE_BITS_8	 8
 #define	SAMPLE_BITS_16	16
 #define	SAMPLE_BITS_24	24
+
+#define	MSLEEP(m)		usleep(m*1000)
 
 static inline bool command_val(unsigned int c, struct audio_stream *s)
 {
@@ -189,10 +201,22 @@ static inline void command_clr(unsigned int c, struct audio_stream *s)
 	pthread_mutex_unlock(&s->lock);
 }
 
+#if 0
+static void stream_debug(char *buffer, const char *fmt, ...)
+{
+	if (NULL == buffer)
+		return;
+
+	va_list args;
+	va_start(args, fmt);
+	vsprintf(buffer, fmt, args);
+	va_end(args);
+}
+#else
+#define	stream_debug(s, f...)
+#endif
 /***************************************************************************************/
-__STATIC__ struct list_entry List_Playback = LIST_HEAD_INIT(List_Playback);
-__STATIC__ struct list_entry List_Transfer = LIST_HEAD_INIT(List_Transfer);
-__STATIC__ int  command_out_channel = 0;
+static int __i2s_sample_rate = PCM_I2S_START_RATE;
 
 __STATIC__ void *audio_capture(void *data)
 {
@@ -209,86 +233,104 @@ __STATIC__ void *audio_capture(void *data)
 	int sample_bits = stream->sample_bits;
 	int periods = stream->periods;
 	int period_bytes = stream->period_bytes;
+	int retry = 2;
 	bool err;
 
+	long long ts = 0, td = 0;
 	int  tid = gettid();
 	int  ret = 0;
 
 	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
 	pthread_setcanceltype (PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
 
-__reinit:
-	err = pRec->Open(pcm, card, device, channels,
-				sample_rate, sample_bits, periods, period_bytes);
-	if (false == err)
-		goto exit_tfunc;
-
-	period_bytes = pRec->GetPeriodBytes();
-
-	printf("<%4d> CAPT: %s [0x%p] <- \n", tid, pOBuf->GetBufferName(), pOBuf);
 	printf("<%4d> CAPT: %s, card:%d.%d %d hz period bytes[%4d], Q[%p]\n",
 		tid, pcm, card, device, sample_rate, period_bytes, pOBuf);
+	printf("<%4d> CAPT: OUT[%p] %s\n", tid, pOBuf, pOBuf->GetBufferName());
 
-	/*
-	 * clear push buffer (for device)
-	 */
+	for (int i = 0; retry > i; i++) {
+		err = pRec->Open(pcm, card, device, channels,
+						sample_rate, sample_bits, periods, period_bytes);
+		if (true == err)
+			break;
+		printf("<%4d> [%d] retry open: %s\n", tid, i, pcm);
+	}
+
+	if (false == err)
+		return NULL;
+
+__reinit:
+
+	bool is_1st_sample = true;
+	RUN_TIMESTAMP_US(ts);
+
+	/* clear push buffer */
 	pOBuf->ClearBuffer();
+	command_clr(CMD_STREAM_REINIT, stream);
+	command_clr(CMD_STREAM_NODATA, stream);
+	period_bytes = pRec->GetPeriodBytes();
 
-	while (!command_val((CMD_EXIT|CMD_REINIT), stream)) {
+	if (pRec)
+		pRec->Start();
+
+	pr_debug("<%4d> CAPT: %s INIT DONE\n", tid, stream->pcm_name);
+
+	while (!command_val((CMD_STREAM_EXIT|CMD_STREAM_REINIT), stream)) {
+
+		if (stream->type == STREAM_CAPTURE_I2S &&
+			command_val(CMD_STREAM_NODATA, stream)) {
+			pr_debug("No data:%s\n", stream->pcm_name);
+			usleep(100);
+			continue;
+		}
 
 		IS_FULL(pOBuf);
 		Buffer = pOBuf->PushBuffer(period_bytes, TIMEOUT_INFINITE);
 		if (NULL == Buffer)
 			continue;
 
-		/*
-		 * Capture from device
-		 */
 		ret = pRec->Capture(Buffer, period_bytes);
-		if (0 > ret) {
-			command_set(CMD_REINIT, stream);
+		if (0 > ret)
 			continue;
-		}
-		pOBuf->Push(period_bytes);
 
-		pr_debug("[CAPT] %s %d %s\n", pOBuf->GetBufferName(), pOBuf->GetAvailSize(), __FUNCTION__);
+		if (is_1st_sample) {
+			END_TIMESTAMP_US(ts, td);
+			struct timeval tv;
+			gettimeofday(&tv, NULL);
+			printf("[%6ld.%06ld s] <%4d> [CAPT] capt [%4d][%3lld.%03lld ms] %s\n",
+				tv.tv_sec, tv.tv_usec, tid, period_bytes, td/1000, td%1000, stream->pcm_name);
+			is_1st_sample = false;
+		}
+
+		pOBuf->PushRelease(period_bytes);
+		pr_debug("<%4d> [CAPT] %s %d %s\n",
+			tid, pOBuf->GetBufferName(), pOBuf->GetAvailSize(), __FUNCTION__);
 	}
 
-	pRec->Stop ();
-	pRec->Close();
-
-	/*
-	 * Reopen device
-	 */
-	if (command_val(CMD_REINIT, stream)) {
-		command_clr(CMD_REINIT, stream);
+	if (command_val(CMD_STREAM_REINIT, stream)) {
+		if (pRec)
+			pRec->Stop();
 		goto __reinit;
 	}
 
-exit_tfunc:
+	if (pRec)
+		pRec->Close();
+
 	return NULL;
 }
 
-__STATIC__ void audio_pdm_clean(void *arg)
+__STATIC__ void audio_clean_pdm(void *arg)
 {
 	struct audio_stream *stream = (struct audio_stream *)arg;
-	struct list_entry *list, *Head = stream->Head;
+	struct list_entry *list, *Head = &stream->in_stream;
 
-	printf("pdm  clean : %s\n", stream ? stream->pcm_name : "NULL");
+	printf("<%4d> clean PDM : %s\n", gettid(), stream ? stream->pcm_name : "NULL");
 	if (NULL == stream)
 		return;
 
 	list_for_each(list, Head) {
 		struct audio_stream *ps = (struct audio_stream *)list->data;;
-		CQBuffer *pBuf = NULL;
-
 		if (NULL == ps)
 			continue;
-
-		if (ps->qbuf) {
-			pBuf = (CQBuffer *)ps->qbuf;
-			pBuf->Exit();
-		}
 	}
 
 	for (int i = 0; stream->wav_files > i; i++) {
@@ -296,7 +338,7 @@ __STATIC__ void audio_pdm_clean(void *arg)
 		if (pWav)
 			pWav->Close();
 	}
-	printf("pdm  clean : done\n");
+	printf("<%4d> clean PDM : done\n", gettid());
 }
 
 __STATIC__ inline void split_pdm_data(int *s, int *d0, int *d1, int size)
@@ -308,9 +350,9 @@ __STATIC__ inline void split_pdm_data(int *s, int *d0, int *d1, int size)
 		*d1++ = *s++;
 	}
 
-	assert(0 == (((int)s  - (int)S)  - size));
-	assert(0 == (((int)d0 - (int)D0) - size/2));
-	assert(0 == (((int)d1 - (int)D1) - size/2));
+	assert(0 == (((long)s  - (long)S)  - size));
+	assert(0 == (((long)d0 - (long)D0) - size/2));
+	assert(0 == (((long)d1 - (long)D1) - size/2));
 }
 
 __STATIC__ void *audio_pdm_transfer(void *data)
@@ -318,11 +360,9 @@ __STATIC__ void *audio_pdm_transfer(void *data)
 	struct audio_stream *stream = (struct audio_stream *)data;;
 	CQBuffer *pOBuf = (CQBuffer *)stream->qbuf;
 	CQBuffer *pIBuf = NULL;
-	struct list_entry *list, *Head = stream->Head;
+	struct list_entry *list, *Head = &stream->in_stream;
 	unsigned char *IBuffer = NULL, *OBuffer = NULL;
 	int tid = gettid();
-
-	uint64_t ts = 0, td = 0;
 
 	int period_bytes = stream->period_bytes;
 	int *tmp_PDM[2] = { new int[period_bytes], new int[period_bytes] };
@@ -333,12 +373,12 @@ __STATIC__ void *audio_pdm_transfer(void *data)
 	int sample_bits = stream->sample_bits;
 	bool b_FileSave = false;
 
-#ifdef SUPPORT_PDM_AGC_IN
-	CWAVFile *pIWav = new CWAVFile();
+#ifdef SUPPORT_PDM_IN_DUMP
+	CWAVFile *pIWav = new CWAVFile(WAV_SAVE_PERIOD);
 #endif
-	CWAVFile *pOWav[2] = { new CWAVFile(), new CWAVFile(), };
+	CWAVFile *pOWav[2] = { new CWAVFile(WAV_SAVE_PERIOD), new CWAVFile(WAV_SAVE_PERIOD), };
 
-#ifdef SUPPORT_PDM_AGC_IN
+#ifdef SUPPORT_PDM_IN_DUMP
 	stream->WavFile[0] = pIWav;
 #endif
 	stream->WavFile[1] = pOWav[0];
@@ -347,10 +387,10 @@ __STATIC__ void *audio_pdm_transfer(void *data)
 
 	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
 	pthread_setcanceltype (PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
-	pthread_cleanup_push  (audio_pdm_clean, (void *)stream);
+	pthread_cleanup_push  (audio_clean_pdm, (void *)stream);
 
 	list_for_each(list, Head) {
-		struct audio_stream *ps = (struct audio_stream *)list->data;;
+		struct audio_stream *ps = (struct audio_stream *)list->data;
 		if (NULL == ps)
 			continue;
 		if (ps->qbuf)
@@ -359,31 +399,35 @@ __STATIC__ void *audio_pdm_transfer(void *data)
 
 #ifdef SUPPORT_PDM_AGC
 	pdm_STATDEF	pdm_st;
-	int agc_dB = -30;
+	int agc_dB = -24;
 	pdm_Init(&pdm_st);
 #endif
 
-__reinit:
-
-	printf("<%4d> TRAN: %s [%p] -> %s [%p]\n",
-		tid, pIBuf->GetBufferName(), pIBuf, pOBuf->GetBufferName(), pOBuf);
-	printf("<%4d> TRAN: Transfer period bytes[%4d][CMD:0x%x]\n",
+	printf("<%4d> PTRN: Transfer period bytes[%4d][CMD:0x%x]\n",
 		tid, stream->period_bytes, stream->command);
+	printf("<%4d> PTRN: IN [%p] -> OUT[%p] %s -> %s\n",
+		tid, pIBuf, pOBuf, pIBuf->GetBufferName(), pOBuf->GetBufferName());
 #ifdef SUPPORT_PDM_AGC
-	printf("<%4d> TRAN: RUN AGC PDM !!!\n", tid);
+	printf("<%4d> PTRN: RUN AGC PDM !!!\n", tid);
 #endif
 
+__reinit:
 	/*
-	 * clear push buffer (for pdm output)
+	 * clear push buffer
 	 */
-	pOBuf->ClearBuffer();
+	pOBuf->ClearBuffer ();
+	pIBuf->WaitForClear();
+	command_clr(CMD_STREAM_REINIT, stream);
+	command_clr(CMD_STREAM_NODATA, stream);
 
-	while (!command_val((CMD_EXIT|CMD_REINIT), stream)) {
+	pr_debug("<%4d> PTRN: %s INIT DONE\n", tid, stream->pcm_name);
 
-		if (command_val(CMD_CAPT_PDM, stream) &&
+	while (!command_val((CMD_STREAM_EXIT|CMD_STREAM_REINIT), stream)) {
+
+		if (command_val(CMD_CAPT_PDMOUT, stream) &&
 			command_val(CMD_CAPT_RUN, stream)) {
-			bool bWAV = command_val(CMD_CAPTURE_WAVF, stream) ? true : false;
-#ifdef SUPPORT_PDM_AGC_IN
+			bool bWAV = command_val(CMD_CAPT_RAWFORM, stream) ? false : true;
+#ifdef SUPPORT_PDM_IN_DUMP
 			pIWav->Open(bWAV, channels, sample_rate, sample_bits, "%s/%s", path, "pdm_i.wav");
 #endif
 			pOWav[0]->Open(bWAV, channels/2, sample_rate, sample_bits, "%s/pdm_o_%d.wav", path, 0);
@@ -394,38 +438,41 @@ __reinit:
 		}
 
 		if (command_val(CMD_CAPT_STOP, stream)) {
-#ifdef SUPPORT_PDM_AGC_IN
+#ifdef SUPPORT_PDM_IN_DUMP
 			pIWav->Close();
 #endif
 			pOWav[0]->Close(), pOWav[1]->Close();;
 			command_clr((CMD_CAPT_STOP), stream);
 			b_FileSave = false;
 		}
+
 		/*
 		 * Get buffer with PDM resampling size (2048)
+		 * 2048 : period_bytes
 		 */
 		IS_FULL(pOBuf);
-		OBuffer = pOBuf->PushBuffer(period_bytes, TIMEOUT_INFINITE);		// 2048 : period_bytes
+		OBuffer = pOBuf->PushBuffer(period_bytes, TIMEOUT_INFINITE);
 		if (NULL == OBuffer)
 			continue;
 
 
 		/*
 		 * Get buffer from PDM output (5120 -> 8192)
+		 * 5120 -> 8192 : PCM_PDM_TR_INP_BYTES
 		 */
-		IBuffer = pIBuf->PopBuffer(PCM_PDM_TR_INP_BYTES, TIMEOUT_INFINITE);	// 5120 -> 8192 : PCM_PDM_TR_INP_BYTES
+		IBuffer = pIBuf->PopBuffer(PCM_PDM_TR_INP_BYTES, TIMEOUT_INFINITE);
 		if (NULL == IBuffer)
 			continue;
-#ifdef SUPPORT_PDM_AGC_IN
+
+#ifdef SUPPORT_PDM_IN_DUMP
 		if (b_FileSave)
 			pIWav->Write(IBuffer, PCM_PDM_TR_INP_BYTES);
 #endif
+
 		/*
 		 * PDM data AGC and split save output buffer
 		 */
 #ifdef SUPPORT_PDM_AGC
-		RUN_TIMESTAMP_US(ts);
-
 		// AGC
 		assert(OBuffer);
 		assert(IBuffer);
@@ -443,52 +490,41 @@ __reinit:
 			if (b_FileSave)
 				pOWav[i]->Write(dst, length);
 		}
-
-		END_TIMESTAMP_US(ts, td);
-		pr_debug("[PDM ] [%4d][%3llu.%03llu]\n", period_bytes, td/1000, td%1000);
 #endif
-		pIBuf->Pop(PCM_PDM_TR_INP_BYTES);	// Release
-		pOBuf->Push(period_bytes);			// Release
-		pr_debug("[PDM ] %s %d %s\n", pOBuf->GetBufferName(), pOBuf->GetAvailSize(), __FUNCTION__);
+		pIBuf->PopRelease(PCM_PDM_TR_INP_BYTES);	// Release
+		pOBuf->PushRelease(period_bytes);			// Release
+		pr_debug("<%4d> [PDM ] %s %d %s\n",
+			tid, pOBuf->GetBufferName(), pOBuf->GetAvailSize(), __FUNCTION__);
 	}
 
-#ifdef SUPPORT_PDM_AGC_IN
+	if (command_val(CMD_STREAM_REINIT, stream))
+		goto __reinit;
+
+#ifdef SUPPORT_PDM_IN_DUMP
 	pIWav->Close();
 #endif
 	pOWav[0]->Close();
 	pOWav[1]->Close();
 
-	if (command_val(CMD_REINIT, stream)) {
-		command_clr(CMD_REINIT, stream);
-		goto __reinit;
-	}
-
-	printf("EXIT : %s\n", stream->pcm_name);
+	printf("<%4d> EXIT : %s\n",tid, stream->pcm_name);
 	pthread_cleanup_pop(1);
 
 	return NULL;
 }
 
-__STATIC__ void audio_playback_clean(void *arg)
+__STATIC__ void audio_clean_capture(void *arg)
 {
 	struct audio_stream *stream = (struct audio_stream *)arg;
-	struct list_entry *list, *Head = stream->Head;
+	struct list_entry *list, *Head = &stream->in_stream;
 
-	printf("play clean : %s\n", stream ? stream->pcm_name : "NULL");
+	printf("<%4d> clean PLAY: %s\n", gettid(), stream ? stream->pcm_name : "NULL");
 	if (NULL == stream)
 		return;
 
 	list_for_each(list, Head) {
 		struct audio_stream *ps = (struct audio_stream *)list->data;;
-		CQBuffer *pBuf = NULL;
-
 		if (NULL == ps)
 			continue;
-
-		if (ps->qbuf) {
-			pBuf = (CQBuffer *)ps->qbuf;
-			pBuf->Exit();
-		}
 	}
 
 	for (int i = 0; stream->wav_files > i; i++) {
@@ -496,16 +532,18 @@ __STATIC__ void audio_playback_clean(void *arg)
 		if (pWav)
 			pWav->Close();
 	}
-	printf("play clean : done\n");
+	printf("<%4d> clean PLAY: done\n", gettid());
 }
 
-__STATIC__ void *audio_playback(void *data)
+__STATIC__ void *audio_capture_aec(void *data)
 {
 	struct audio_stream *stream = (struct audio_stream *)data;
-	CAudioPlayer *pPlay = NULL;
-	struct list_entry *list, *Head = stream->Head;
+	struct list_entry *list, *Head = &stream->in_stream;
+	CQBuffer *pOBuf = (CQBuffer *)stream->qbuf;
 	CQBuffer *pIBuf[NR_QUEUEBUFF] = { NULL, };
-	unsigned char *Buffer[NR_QUEUEBUFF] = { NULL, };
+
+	unsigned char *IBuffer[NR_QUEUEBUFF] = { NULL, };
+	unsigned char *OBuffer = NULL;
 
 	const char *pcm = stream->pcm_name;
 	char *path = stream->file_path;
@@ -514,43 +552,45 @@ __STATIC__ void *audio_playback(void *data)
 	int channels = stream->channels;
 	int sample_rate = stream->sample_rate;
 	int sample_bits = stream->sample_bits;
-	int periods = stream->periods;
 	int period_bytes = stream->period_bytes;
 
-	int qbuffers = 0, i = 0;
+	int qbuffers = 0, f_no = 0, i = 0;
 	int WAIT_TIME = STREAM_WAIT_TIME;
-	uint64_t ts = 0, td = 0, lp = 0;
 
-	int f_no = 0;
-	bool err;
+#ifdef SUPPORT_AEC_PCMOUT
+	long long ts = 0, td = 0, lp = 0;
+	long long t_min = (-1);
+	long long t_max = 0;
+	long long t_tot = 0;
+#endif
 
 	int aec_buf_bytes = PCM_AEC_PERIOD_BYTES;	// For Ref
 	int buf_out_bytes = PCM_PDM_TR_OUT_BYTES;	// <--- must be 2048 : Split 1024 * 2
 	bool b_FileSave = false;
 	int tid = gettid();
 
-	uint64_t t_min = (-1);
-	uint64_t t_max = 0;
-	uint64_t t_tot = 0;
-
-	CWAVFile *pECWav = new CWAVFile();
-	CWAVFile *pSIWav = new CWAVFile();
+	CWAVFile *pECWav = new CWAVFile(WAV_SAVE_PERIOD);
+	CWAVFile *pSIWav = new CWAVFile(WAV_SAVE_PERIOD);
 	stream->WavFile[0] =  pECWav;
 	stream->WavFile[1] =  pSIWav;
 	stream->wav_files  =  2;
 
-	int Out_PCM_aec1[256], Out_PCM_aec2[256];
-	int Out_PCM[256];
-	int Dummy[256] = { 0, };	// L/R : 256 Frame
-	int In_SYNC[512];
+#ifdef SUPPORT_AEC_PCMOUT
+	int *Out_PCM_aec1 = new int[256], *Out_PCM_aec2 = new int[256];
+	int *Out_PCM = new int[256];
+#endif
+	int *Dummy = new int[256];	// L/R : 256 Frame
+	int  ISYNC[512];
 	int n = 0;
 
 	int *In_Buf[2] = { Dummy, Dummy };	// PDM : L1/R1, L1/R1, L1/R1, ...
 	int *In_Ref[2] = { Dummy, Dummy };	// I2S
 
+	memset(Dummy, 0, 256*sizeof(int));
+
 	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
 	pthread_setcanceltype (PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
-	pthread_cleanup_push  (audio_playback_clean, (void *)stream);
+	pthread_cleanup_push  (audio_clean_capture, (void *)stream);
 
 	list_for_each(list, Head) {
 		struct audio_stream *ps = (struct audio_stream *)list->data;;
@@ -559,29 +599,34 @@ __STATIC__ void *audio_playback(void *data)
 		if (ps->qbuf)  pIBuf[qbuffers++] = (CQBuffer *)ps->qbuf;
 	}
 
-	printf("<%4d> PLAY: %s, card:%d.%d %d hz period bytes[%4d] WAIT %dms\n",
+	printf("<%4d> CTRN: %s, card:%d.%d %d hz period bytes[%4d] WAIT %dms\n",
 		tid, pcm, card, device, sample_rate, period_bytes, WAIT_TIME);
-
+	printf("<%4d> CTRN: AEC [%s] !!!\n",
+		tid, command_val(CMD_AEC_PROCESS, stream) ? "RUN":"STOP");
 	for (i = 0; qbuffers > i; i++)
-		printf("<%4d> PLAY: %s [0x%p](%d) -> \n",
-			tid, pIBuf[i]->GetBufferName(), pIBuf[i], i);
+		printf("<%4d> CTRN: IN [%d][%p] %s -> [%p] %s\n",
+			tid, i, pIBuf[i], pIBuf[i]->GetBufferName(), pOBuf, pOBuf->GetBufferName());
 
-	if (pcm) {
-		pPlay = new CAudioPlayer(AUDIO_STREAM_PLAYBACK);
-		err = pPlay->Open(pcm, card, device, channels,
-				sample_rate, sample_bits, periods, period_bytes);
-		if (false == err)
-			goto exit_tfunc;
-	}
-	printf("<%4d> PLAY: AEC [%s] !!!\n", tid, command_val(CMD_EC_PROCESS, stream) ? "RUN":"STOP");
+__reinit:
+	/* clear push buffer */
+	pOBuf->ClearBuffer();
 
-	while (!command_val(CMD_EXIT, stream)) {
+	/* wait cleard push buufer */
+	for (i = 0, n = 0; qbuffers > i; i++)
+		pIBuf[i]->WaitForClear();
+
+	command_clr(CMD_STREAM_REINIT, stream);
+	command_clr(CMD_STREAM_NODATA, stream);
+
+	pr_debug("<%4d> CTRN: %s INIT DONE\n", tid, stream->pcm_name);
+
+	while (!command_val((CMD_STREAM_EXIT|CMD_STREAM_REINIT), stream)) {
 
 		if (command_val(CMD_CAPT_RUN, stream)) {
-			bool bWAV = command_val(CMD_CAPTURE_WAVF, stream) ? true : false;
+			bool bWAV = command_val(CMD_CAPT_RAWFORM, stream) ? false : true;
 			pSIWav->Open(bWAV, channels*2, sample_rate, sample_bits, "%s/capt%d.wav", path, f_no);
 			pECWav->Open(bWAV, channels  , sample_rate, sample_bits, "%s/outp%d.wav", path, f_no);
-			f_no++;	/* next file number */
+			f_no++;	/* next file */
 			b_FileSave = true;
 			command_clr(CMD_CAPT_RUN, stream);
 		}
@@ -593,29 +638,30 @@ __STATIC__ void *audio_playback(void *data)
 			command_clr(CMD_CAPT_STOP, stream);
 		}
 
-		int pcm_channel = command_out_channel;
-
 		for (i = 0, n = 0; qbuffers > i; i++) {
 			unsigned int type = pIBuf[i]->GetBufferType();
 
 			switch (type) {
-			case STREAM_TRANS_PDM :	/* From PDM DATA */
+			case STREAM_TRANS_PDM :
 				/* Wait PDM buffer */
 				do {
-					Buffer[i] = pIBuf[i]->PopBuffer(buf_out_bytes,  WAIT_TIME);
-				} while (NULL == Buffer[i] && !command_val(CMD_EXIT, stream));
+					IBuffer[i] = pIBuf[i]->PopBuffer(buf_out_bytes,  WAIT_TIME);
+				} while (NULL == IBuffer[i] &&
+						!command_val(CMD_STREAM_EXIT|CMD_STREAM_REINIT, stream));
 
-				In_Buf[0] = (int*)(Buffer[i]);
-				In_Buf[1] = (int*)(Buffer[i] + (buf_out_bytes/2));
+				In_Buf[0] = (int*)(IBuffer[i]);
+				In_Buf[1] = (int*)(IBuffer[i] + (buf_out_bytes/2));
 				break;
 
-			case STREAM_CAPTURE_I2S : /* From I2S DATA */
+			case STREAM_CAPTURE_I2S :
 				/* Wait I2S buffer */
 				do {
-					Buffer[i] = pIBuf[i]->PopBuffer(aec_buf_bytes, WAIT_TIME);
-				} while (NULL == Buffer[i] && !command_val(CMD_EXIT, stream));
+					IBuffer[i] = pIBuf[i]->PopBuffer(aec_buf_bytes, WAIT_TIME);
+				} while (NULL == IBuffer[i] &&
+						!command_val(CMD_STREAM_EXIT|CMD_STREAM_REINIT, stream) &&
+						!command_val(CMD_STREAM_NODATA, stream));
 
-				In_Ref[n] = Buffer[i] ? (int*)Buffer[i] : Dummy;
+				In_Ref[n] = IBuffer[i] ? (int*)IBuffer[i] : Dummy;
 				n++;	/* Next */
 				break;
 
@@ -625,36 +671,56 @@ __STATIC__ void *audio_playback(void *data)
 			}
 
 		#if 1
-			if (NULL == Buffer[i])
+			if (NULL == IBuffer[i] && !command_val(CMD_STREAM_NODATA, stream))
 				IS_EMPTY(pIBuf[i]);
 		#endif
 		}
-#if 1
+
+		if (command_val(CMD_STREAM_NODATA, stream)) {
+			In_Ref[0] = Dummy;
+			In_Ref[1] = Dummy;
+		}
+
+		if (command_val(CMD_STREAM_REINIT, stream))
+			goto __reinit;
+
 		/*
 		 * save to file MIXED PDM0/1 & I2S0/1
 		 */
 		if (b_FileSave) {
-			short *d  = (short *)In_SYNC;
-			short *s0 = (short *)In_Buf[0];	// PDM
-			short *s1 = (short *)In_Ref[0];	// I2S
-			short *s2 = (short *)In_Buf[1];	// PDM
-			short *s3 = (short *)In_Ref[1];	// REF
+	#if 1
+			short *d  = (short *)ISYNC;
+			short *s0 = (short *)In_Buf[0];	// INP: PDM0
+			short *s1 = (short *)In_Ref[0];	// INP: PDM
+			short *s2 = (short *)In_Buf[0];	// REF: I2S0
+			short *s3 = (short *)In_Ref[1];	// REF: I2S1
 
-			s1++, s3++;	/* for Right channel */
+			s1++, s3++;	/* for I2S Right */
+
 			for (i = 0; aec_buf_bytes > i; i += 4) {
 				*d++ = *s0++, s0++;
 				*d++ = *s1++, s1++;
 				*d++ = *s2++, s2++;
 				*d++ = *s3++, s3++;
 			}
-			assert(0 == ((int)d - (int)In_SYNC) - sizeof(In_SYNC));
-			pSIWav->Write((void*)In_SYNC, aec_buf_bytes*2);
+	#else
+			int *d  = (int *)ISYNC;
+			int *s0 = (int *)In_Ref[0];	// I2S0
+			int *s1 = (int *)In_Ref[1];	// I2S1
+
+			for (i = 0; aec_buf_bytes > i; i += 4) {
+				*d++ = *s0++;
+				*d++ = *s1++;
+			}
+	#endif
+			assert(0 == ((long)d - (long)ISYNC) - sizeof(ISYNC));
+			pSIWav->Write((void*)ISYNC, aec_buf_bytes*2);
 		}
-#endif
+
 		/*
-		 * AEC preprocessing
+		 * AEC process
 		 */
-		if (command_val(CMD_EC_PROCESS, stream)) {
+		if (command_val(CMD_AEC_PROCESS, stream)) {
 #ifdef SUPPORT_AEC_PCMOUT
 			RUN_TIMESTAMP_US(ts);
 
@@ -667,79 +733,150 @@ __STATIC__ void *audio_playback(void *data)
 					(short int*)Out_PCM);
 
 			END_TIMESTAMP_US(ts, td);
-			//if (command_val(CMD_EC_DEBUG, stream))
-			if (td/1000 > 11)
-				printf("E: AEC [%3llu.%03llu]\n", td/1000, td%1000);
 
 			if (b_FileSave)
 				pECWav->Write((void*)Out_PCM, aec_buf_bytes);
 #endif
-			if (pPlay) {
-				if (0 == pcm_channel) {
-					pPlay->PlayBack((unsigned char*)Out_PCM, period_bytes);
-				} else {
-					if (Buffer[pcm_channel-1])
-						pPlay->PlayBack(Buffer[pcm_channel-1], period_bytes);
-				}
-			}
-		} else {
-			if (pPlay && Buffer[pcm_channel-1])
-				pPlay->PlayBack(Buffer[pcm_channel-1], period_bytes);
 		}
 
 		/* release buffers */
 		for (i = 0; qbuffers > i; i++) {
-			if (Buffer[i]) {
+			if (IBuffer[i]) {
 				unsigned int type = pIBuf[i]->GetBufferType();
 				switch (type) {
-					case STREAM_TRANS_PDM  : pIBuf[i]->Pop(buf_out_bytes); break;
-					case STREAM_CAPTURE_I2S: pIBuf[i]->Pop(aec_buf_bytes); break;
+					case STREAM_TRANS_PDM  : pIBuf[i]->PopRelease(buf_out_bytes); break;
+					case STREAM_CAPTURE_I2S: pIBuf[i]->PopRelease(aec_buf_bytes); break;
 					default:	break;
 				}
-				pr_debug("[PLAY] %d %s %d %s\n", i,
+				pr_debug("<%4d> [CTRN] %d %s %d %s\n", tid, i,
 					pIBuf[i]->GetBufferName(), pIBuf[i]->GetAvailSize(), __FUNCTION__);
 			}
 		}
 
+		/* Copy to playback */
+		OBuffer = pOBuf->PushBuffer(aec_buf_bytes, 1);
+		if (OBuffer) {
+			/* copy AEC out */
+		#if 0
+			memcpy(OBuffer, Out_PCM, aec_buf_bytes);
+		#else
+			memcpy(OBuffer, In_Ref[0], aec_buf_bytes);
+		#endif
+			pOBuf->PushRelease(aec_buf_bytes);
+		}
+
+#ifdef SUPPORT_AEC_PCMOUT
 		if (t_min > td)
 			t_min = td;
 		if (td > t_max)
 			t_max = td;
 		t_tot += td, lp++;
-
-		pr_debug("PLAY[%3llu.%03llu]\n",
-				td/1000, td%1000);
+#endif
 	}
+
 #ifdef SUPPORT_AEC_PCMOUT
-	pr_debug("AEC : min %3llu.%03llu ms, max %3llu.%03llu ms, avr %3llu.%03llu ms\n",
-		t_min/1000, t_min%1000, t_max/1000, t_max%1000, (t_tot/lp)/1000, (t_tot/lp)%1000);
+	pr_debug("<%4d> AEC : min %3llu.%03llu ms, max %3llu.%03llu ms, avr %3llu.%03llu ms\n",
+		tid, t_min/1000, t_min%1000, t_max/1000, t_max%1000, (t_tot/lp)/1000, (t_tot/lp)%1000);
 #endif
 
-	if (pPlay) {
-		pPlay->Stop ();
-		pPlay->Close();
-	}
+	if (command_val(CMD_STREAM_REINIT, stream))
+		goto __reinit;
 
-exit_tfunc:
-	printf("EXIT : %s\n", stream->pcm_name);
+	printf("<%4d> EXIT : %s\n", tid, stream->pcm_name);
 	pSIWav->Close();
 	pECWav->Close();
 
-	pthread_cleanup_pop(1);
+	pthread_cleanup_pop(0);
 
+	return NULL;
+}
+
+__STATIC__ void *audio_playback(void *data)
+{
+	struct audio_stream *stream = (struct audio_stream *)data;
+	CAudioPlayer *pPlay = NULL;
+	struct list_entry *list, *Head = &stream->in_stream;
+	CQBuffer *pIBuf = NULL;
+	unsigned char *Buffer =  NULL;
+
+	const char *pcm = stream->pcm_name;
+	int card = stream->card;
+	int device = stream->device;
+	int channels = stream->channels;
+	int sample_rate = stream->sample_rate;
+	int sample_bits = stream->sample_bits;
+	int periods = stream->periods;
+	int period_bytes = stream->period_bytes;
+
+	int qbuffers = 0, i = 0;
+	int WAIT_TIME = STREAM_WAIT_TIME;
+
+	bool err;
+	int tid = gettid();
+
+	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
+	pthread_setcanceltype (PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
+
+	list_for_each(list, Head) {
+		struct audio_stream *ps = (struct audio_stream *)list->data;;
+		if (NULL == ps)
+			continue;
+		if (ps->qbuf) {
+			pIBuf = (CQBuffer *)ps->qbuf;
+			qbuffers++;
+		}
+	}
+	assert(1 == qbuffers);
+
+	printf("<%4d> PLAY: %s, card:%d.%d %d hz period bytes[%4d] WAIT %dms\n",
+		tid, pcm, card, device, sample_rate, period_bytes, WAIT_TIME);
+	printf("<%4d> PLAY: AEC [%s] !!!\n",
+		tid, command_val(CMD_AEC_PROCESS, stream) ? "RUN":"STOP");
+
+	if (pcm) {
+		pPlay = new CAudioPlayer(AUDIO_STREAM_PLAYBACK);
+		err = pPlay->Open(pcm, card, device, channels,
+						sample_rate, sample_bits, periods, period_bytes);
+		if (false == err)
+			goto exit_tfunc;
+	}
+	printf("<%4d> PLAY: IN [%d][%p] %s \n", tid, i, pIBuf, pIBuf->GetBufferName());
+
+__reinit:
+	pIBuf->WaitForClear();
+	command_clr(CMD_STREAM_REINIT, stream);
+	command_clr(CMD_STREAM_NODATA, stream);
+
+	pr_debug("<%4d> PLAY: %s INIT DONE\n", tid, stream->pcm_name);
+
+	while (!command_val((CMD_STREAM_EXIT|CMD_STREAM_REINIT), stream)) {
+
+		Buffer = pIBuf->PopBuffer(period_bytes, 1);
+		if (NULL == Buffer)
+			continue;
+
+		if (pPlay)
+			pPlay->PlayBack((unsigned char*)Buffer, period_bytes);
+
+		pIBuf->PopRelease(period_bytes);
+	}
+
+	if (command_val(CMD_STREAM_REINIT, stream))
+		goto __reinit;
+
+	if (pPlay)
+		pPlay->Close();
+
+exit_tfunc:
+	printf("<%4d> EXIT : %s\n", tid, stream->pcm_name);
 	return NULL;
 }
 
 __STATIC__ void audio_init_stream(struct audio_stream *stream, int card, int device,
 					const char *pcm_name, unsigned int type, int channels,
-					int sample_rate, int sample_bits, int period_bytes, int periods, int *qcount)
+					int sample_rate, int sample_bits, int period_bytes, int periods)
 {
-	struct list_entry *list;
-	int qb = *qcount;
-	int multiple = 0 == STREAM_BUFF_SIZE_MULTI ? 0 : STREAM_BUFF_SIZE_MULTI;
-	int persios;
-
-	if (!stream)
+	if (NULL == stream)
 		return;
 
 	stream->pcm_name = pcm_name;
@@ -754,53 +891,47 @@ __STATIC__ void audio_init_stream(struct audio_stream *stream, int card, int dev
 	stream->qbuf = NULL;
 	stream->rate_changed = false;
 	stream->is_valid = true;
-	pthread_mutex_init(&stream->lock, NULL);
 
-	persios = stream->periods*multiple;
+	int persios = stream->periods * (0 == STREAM_BUFF_SIZE_MULTI ? 0 : STREAM_BUFF_SIZE_MULTI);
+
+	pthread_mutex_init(&stream->lock, NULL);
+	INIT_LIST_HEAD(&stream->in_stream, NULL);
+	INIT_LIST_HEAD(&stream->stream, stream);
 
 	switch (type) {
 	case STREAM_PLAYBACK:
-		stream->Head = &List_Playback;
-		stream->fnc = audio_playback;
-		printf("S_INIT PLAY: %s\n", pcm_name);
+		stream->func = audio_playback;
+		pr_debug("INIT PLAY: %s\n", pcm_name);
+		break;
+
+	case STREAM_TRANS_CAPT:
+		stream->func = audio_capture_aec;
+		stream->qbuf = new CQBuffer(persios, stream->period_bytes, pcm_name, type);
+		pr_debug("INIT CTRN: %s, Q[%p] [%d:%d]\n",
+			pcm_name, stream->qbuf, stream->period_bytes, periods);
 		break;
 
 	case STREAM_TRANS_PDM:
-		stream->Head = &List_Transfer;// Head is Transfer for Input
-		stream->fnc = audio_pdm_transfer;
+		stream->func = audio_pdm_transfer;
 		stream->qbuf = new CQBuffer(persios, stream->period_bytes, pcm_name, type);
-		list = new struct list_entry;
-		list_add(list, &List_Playback, stream);	// <-- register to playback for Output
-		qb += 1;
-		printf("INIT TRAN: %s, Q[%p] [%d:%d]\n",
+		pr_debug("INIT PTRN: %s, Q[%p] [%d:%d]\n",
 			pcm_name, stream->qbuf, stream->period_bytes, periods);
 		break;
 
 	case STREAM_CAPTURE_I2S:
-		stream->Head = &List_Playback;	// <-- register to playback
-		stream->fnc  = audio_capture;
+		stream->func = audio_capture;
 		stream->qbuf = new CQBuffer(persios, stream->period_bytes, pcm_name, type);
-		list = new struct list_entry;
-		list_add(list, stream->Head, stream);
-		qb += 1;
-		printf("INIT CAPT: %s, Q[%p] [%d:%d]\n",
+		pr_debug("INIT CAPT: %s, Q[%p] [%d:%d]\n",
 			pcm_name, stream->qbuf, stream->period_bytes, periods);
 		break;
 
 	case STREAM_CAPTURE_PDM:
-		stream->Head = &List_Transfer;	// <-- register to transfer
-		stream->fnc  = audio_capture;
+		stream->func = audio_capture;
 		stream->qbuf = new CQBuffer(persios, stream->period_bytes, pcm_name, type);
-		list = new struct list_entry;
-		list_add(list, stream->Head, stream);
-		qb += 1;
-		printf("INIT CAPT: %s, Q[%p] [%d:%d]\n",
+		pr_debug("INIT CAPT: %s, Q[%p] [%d:%d]\n",
 			pcm_name, stream->qbuf, stream->period_bytes, periods);
 		break;
 	}
-
-	if (qcount)
-		*qcount = qb;
 
 	return;
 }
@@ -828,6 +959,7 @@ __STATIC__ void *audio_rate_detector(void *data)
 	int buf_sz = sizeof(buffer)/sizeof(buffer[0]);
 	int ev_sz;
 	int fd, i = 0;
+	struct timeval tv;
 
 	fd = audio_uevent_init();
 	if (0 > fd)
@@ -836,26 +968,40 @@ __STATIC__ void *audio_rate_detector(void *data)
 	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
 	pthread_setcanceltype (PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
 
-	while (!command_val(CMD_EXIT, streams)) {
+	while (!command_val(CMD_STREAM_EXIT, streams)) {
 		memset(buffer, 0, sizeof(buffer));
 		ev_sz = audio_uevent_event(fd, buffer, buf_sz);
 		if (!ev_sz)
 			continue;
 
+		bool b_mod_rate = false;
+		bool b_no_data = false;
 		audio_uevent_parse(buffer, &udev);
-		if (!udev.sample_rate)
-			continue;
+		gettimeofday(&tv, NULL);
+
+		if (udev.sample_rate &&
+			udev.sample_rate != __i2s_sample_rate) {
+			printf("***** (%6ld.%06ld s) Changed Rate [%dhz -> %dhz]*****\n",
+					tv.tv_sec, tv.tv_usec, __i2s_sample_rate, udev.sample_rate);
+			b_mod_rate = true;
+			__i2s_sample_rate = udev.sample_rate;
+		}
+
+		if (udev.sample_frame && !strcmp(udev.sample_frame, "YES")) {
+			printf("***** (%6ld.%06ld s) Sample NO DATA *****\n", tv.tv_sec, tv.tv_usec);
+			b_no_data = true;
+			__i2s_sample_rate = PCM_I2S_START_RATE;
+		}
 
 		for (i = 0; NR_THREADS > i; i++) {
-			if (streams[i].thread) {
-				streams[i].command |= CMD_REINIT;
-				printf("<%d>[%s]=n", i, streams[i].pcm_name);
-				if (streams[i].pcm_name && strstr(streams[i].pcm_name, "SNDNULL")) {
-					printf("***** changed sample rate %s [%dhz]*****\n",
-						streams[i].pcm_name, udev.sample_rate);
-					streams[i].sample_rate = udev.sample_rate;
-				}
-			}
+			if (!streams[i].is_valid)
+				continue;
+
+			if (b_mod_rate)
+				command_set(CMD_STREAM_REINIT, &streams[i]);
+
+			if (b_no_data)
+				command_set(CMD_STREAM_NODATA, &streams[i]);
 		}
 	}
 
@@ -864,12 +1010,10 @@ __STATIC__ void *audio_rate_detector(void *data)
 }
 #endif
 
-__STATIC__ void streams_command(unsigned int cmd, bool set,
-					struct audio_stream *streams)
+__STATIC__ void streams_command(unsigned int cmd, bool set, struct audio_stream *streams)
 {
 	for (int i = 0; NR_THREADS > i; i++) {
-		if (streams[i].thread) {
-
+		if (streams[i].is_valid) {
 			pthread_mutex_lock(&streams[i].lock);
 			set ? streams[i].command |= cmd :
 			streams[i].command &= ~cmd;
@@ -887,29 +1031,29 @@ __STATIC__ void	stream_wait_ready(int msec)
 	usleep(msec*1000);
 }
 
-static void *monitor(void *arg)
+static void *stream_monitor(void *arg)
 {
 	struct audio_stream *pStreams = (struct audio_stream *)arg;
-	while(1)
-	{
-		usleep(3000000);
-		printf("=================================================\n");
+	while (1) {
+		usleep(STREAM_MONITOR_PERIOD);
+		printf("================================================================\n");
 		for(int i = 0 ; i < NR_THREADS ; i++) {
 			CQBuffer *pQBuf = (CQBuffer *)pStreams[i].qbuf;
 			if( pQBuf ){
-				printf("[%24s] : AvailSize = %7d/%7d\n",
-					pQBuf->GetBufferName(), pQBuf->GetAvailSize(), pQBuf->GetBufferBytes());
+				printf("[%24s] : AvailSize = %7d/%7d [%s]\n",
+					pQBuf->GetBufferName(), pQBuf->GetAvailSize(), pQBuf->GetBufferBytes(),
+					pStreams[i].dbg_message);
 			}
 		}
-		printf("=================================================\n");
+		printf("================================================================\n");
 	}
 	return NULL;
 }
 
-void start_moinitor( void * arg )
+void audio_stream_monitor(void * arg)
 {
 	static pthread_t hMonitorThread;
-	if( 0 != pthread_create(&hMonitorThread, NULL, monitor, arg ) ) {
+	if(0 != pthread_create(&hMonitorThread, NULL, stream_monitor, arg)) {
    		printf("fail, mointor thread %s \n", strerror(errno));
 	}
 }
@@ -918,14 +1062,12 @@ __STATIC__ void print_usage(void)
 {
 	printf("\n");
     printf("usage: options\n");
-    printf("-c catpture path \n");
-    printf("-e skip AEC \n");
-    printf("-d show AEC time  \n");
+    printf("-c capture path \n");
+    printf("-e skip AEC process \n");
     printf("-f save to raw format \n");
     printf("-i not wait in argument \n");
     printf("-w start file capture \n");
     printf("-p skip pdm capute, with '-w' \n");
-    printf("-o select test output data (0: aec pcm out, 1,2,3,4: from device  \n");
 }
 
 __STATIC__ void print_cmd_usage(void)
@@ -935,9 +1077,7 @@ __STATIC__ void print_cmd_usage(void)
     printf("'q'	  : Quiet \n");
     printf("'s'	  : start catpture \n");
     printf("'t'	  : stop  catpture \n");
-    printf("'n'	  : reinit devices \n");
-    printf("'d'	  : AEC debug time \n");
-    printf("'num' : select test output data (0: aec pcm out, 1,2,3,4: from device  \n");
+    printf("'n'	  : init  devices \n");
 }
 
 #define	cmd_compare(s, c)	(0 == strncmp(s, c, strlen(c)-1))
@@ -947,38 +1087,34 @@ int main(int argc, char **argv)
 	int opt;
 
 	struct audio_stream streams[NR_THREADS];
+	pthread_t thread[NR_THREADS];
 	pthread_attr_t attr;
 	size_t stacksize;
 
 	char path[256] = {0, };
 	char cmd[256] = {0, };
 
-	int i = 0, qcounts = 0;
 	int th_num = 0;
-	int ret;
+	int i = 0, ret;
 	long khz = cpufreq_get_speed();
 
-	int  o_output_ch = 0;
 	bool o_inargument = true;
 	bool o_aec_proc = true;
-	bool o_aec_dbg = false;
-	bool o_path = false;
-	bool o_rawformat = false;
+	bool o_capt_path = false;
+	bool o_capt_raw = false;
 	bool o_filewrite = false;
-	bool o_pdm_capt = true;
+	bool o_capt_pdm = true;
 
 	memset(streams, 0x0, sizeof(streams));
 
-    while (-1 != (opt = getopt(argc, argv, "hedofipwc:"))) {
+    while (-1 != (opt = getopt(argc, argv, "hefipwc:"))) {
 		switch(opt) {
-        case 'o':   o_output_ch = atoi(optarg); break;
         case 'e':   o_aec_proc = false;			break;
-        case 'd':   o_aec_dbg = true;			break;
-        case 'f':   o_rawformat = true;			break;
+        case 'f':   o_capt_raw = true;			break;
         case 'i':   o_inargument = false;		break;
        	case 'w':   o_filewrite = true;			break;
-       	case 'p':   o_pdm_capt = false;			break;
-       	case 'c':   o_path = true;
+       	case 'p':   o_capt_pdm = false;			break;
+       	case 'c':   o_capt_path = true;
        				strcpy(path, optarg);
        				break;
         default:   	print_usage();
@@ -990,40 +1126,55 @@ int main(int argc, char **argv)
 	/* cpu speed */
 	cpufreq_set_speed(RUN_CPUFREQ_KHZ);
 
-	memset(streams, 0, sizeof(struct audio_stream)*NR_THREADS);
-	command_out_channel = o_output_ch;
-
 	/* for debugging */
 	signal(SIGSEGV, sig_handler);
 	signal(SIGILL , sig_handler);
 
 	printf("************************ RUN[%d][%ld -> %ld Mhz] ************************\n",
-		getpid(), khz, cpufreq_get_speed());
+			getpid(), khz, cpufreq_get_speed());
 
 #ifdef SUPPORT_AEC_PCMOUT
-	printf("[SET AEC]\n");
+	printf("<< AEC BUILD >>\n");
 	if (o_aec_proc)
 		aec_mono_init();
 #endif
 
 	/* player */
-#if 0
-	audio_init_stream(&streams[0], 0, 0, "default:CARD=UAC2Gadget",  STREAM_PLAYBACK	, 2, 16000, 16,
-			PCM_I2S_PERIOD_BYTES, 32, &qcounts);
-#else
 	// I2SRT5631 : SVT
 	// I2SES8316 : DRONE
 	/* capture: cat /proc/asound/cards */
-	audio_init_stream(&streams[0], 0, 0, NULL						, STREAM_PLAYBACK   , CH_2, 16000, SAMPLE_BITS_16, PCM_AEC_PERIOD_BYTES, PCM_AEC_PERIOD_SIZE, &qcounts);
-	audio_init_stream(&streams[1], 1, 0, "default:CARD=SNDNULL0"   	, STREAM_CAPTURE_I2S, CH_2, 16000, SAMPLE_BITS_16, PCM_I2S_PERIOD_BYTES, PCM_I2S_PERIOD_SIZE, &qcounts);	// I2S0
-	audio_init_stream(&streams[2], 2, 0, "default:CARD=SNDNULL1"   	, STREAM_CAPTURE_I2S, CH_2, 16000, SAMPLE_BITS_16, PCM_I2S_PERIOD_BYTES, PCM_I2S_PERIOD_SIZE, &qcounts);	// I2S1
-	audio_init_stream(&streams[3], 3, 0, "default:CARD=PDMRecorder"	, STREAM_CAPTURE_PDM, CH_4, 16000, SAMPLE_BITS_16, PCM_PDM_PERIOD_BYTES, PCM_PDM_PERIOD_SIZE, &qcounts);	// PDM
-	audio_init_stream(&streams[4], 4, 0, "PDM Transfer"				, STREAM_TRANS_PDM	, CH_4, 16000, SAMPLE_BITS_16, PCM_PDM_TR_OUT_BYTES, PCM_PDM_TR_OUT_SIZE, &qcounts);	// PDM
+#if 1
+	audio_init_stream(&streams[0],  0,  0, "default:CARD=UAC2Gadget"	, STREAM_PLAYBACK   , CH_2, 16000, SAMPLE_BITS_16, PCM_UAC_PERIOD_BYTES, PCM_UAC_PERIOD_SIZE);
+	audio_init_stream(&streams[1], -1, -1, "CAPT Transfer"				, STREAM_TRANS_CAPT , CH_2, 16000, SAMPLE_BITS_16, PCM_AEC_PERIOD_BYTES, PCM_AEC_PERIOD_SIZE);
+	audio_init_stream(&streams[2],  1,  0, "default:CARD=SNDNULL0"   	, STREAM_CAPTURE_I2S, CH_2, 16000, SAMPLE_BITS_16, PCM_I2S_PERIOD_BYTES, PCM_I2S_PERIOD_SIZE);	// I2S1
+	audio_init_stream(&streams[3],  2,  0, "default:CARD=SNDNULL1"   	, STREAM_CAPTURE_I2S, CH_2, 16000, SAMPLE_BITS_16, PCM_I2S_PERIOD_BYTES, PCM_I2S_PERIOD_SIZE);	// I2S0
+	audio_init_stream(&streams[4],  3,  0, "default:CARD=PDMRecorder"	, STREAM_CAPTURE_PDM, CH_4, 64000, SAMPLE_BITS_16, PCM_PDM_PERIOD_BYTES, PCM_PDM_PERIOD_SIZE);	// PDM
+	audio_init_stream(&streams[5], -1, -1, "PDM Transfer"				, STREAM_TRANS_PDM	, CH_4, 16000, SAMPLE_BITS_16, PCM_PDM_TR_OUT_BYTES, PCM_PDM_TR_OUT_SIZE);	// PDM
+#else
+	audio_init_stream(&streams[0],  0,  0, NULL						    , STREAM_PLAYBACK   , CH_2, 16000, SAMPLE_BITS_16, PCM_AEC_PERIOD_BYTES, PCM_AEC_PERIOD_SIZE);
+	audio_init_stream(&streams[1],  1,  0, "default:CARD=SNDNULL0"   	, STREAM_CAPTURE_I2S, CH_2, 16000, SAMPLE_BITS_16, PCM_I2S_PERIOD_BYTES, PCM_I2S_PERIOD_SIZE);	// I2S1
+	audio_init_stream(&streams[2],  2,  0, "default:CARD=SNDNULL1"   	, STREAM_CAPTURE_I2S, CH_2, 16000, SAMPLE_BITS_16, PCM_I2S_PERIOD_BYTES, PCM_I2S_PERIOD_SIZE);	// I2S0
+	audio_init_stream(&streams[3],  3,  0, "default:CARD=PDMRecorder"	, STREAM_CAPTURE_PDM, CH_4, 64000, SAMPLE_BITS_16, PCM_PDM_PERIOD_BYTES, PCM_PDM_PERIOD_SIZE);	// PDM
+	audio_init_stream(&streams[4],  4,  0, "PDM Transfer"				, STREAM_TRANS_PDM	, CH_4, 16000, SAMPLE_BITS_16, PCM_PDM_TR_OUT_BYTES, PCM_PDM_TR_OUT_SIZE);	// PDM
 #endif
+
+	// CAPT AEC -> playback
+	list_add(&streams[1].stream, &streams[0].in_stream);
+
+	// I2S -> CAPT AEC
+	list_add(&streams[2].stream, &streams[1].in_stream);
+
+	// I2S -> CAPT AEC
+	list_add(&streams[3].stream, &streams[1].in_stream);
+
+	// PDM -> PDM trans -> CAPT AEC
+	list_add(&streams[4].stream, &streams[5].in_stream);
+	list_add(&streams[5].stream, &streams[1].in_stream);
+
 	pthread_attr_init(&attr);
    	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
    	pthread_attr_getstacksize (&attr, &stacksize);
-	start_moinitor(streams);
+	audio_stream_monitor(streams);
 
 	/* capture/play threads */
 	for (i = 0; NR_THREADS > i; i++) {
@@ -1032,48 +1183,29 @@ int main(int argc, char **argv)
 		if (false == stream->is_valid)
 			continue;
 
-		if (o_path)
-			strcpy(stream->file_path, path);
-
-		command_clr(CMD_EXIT, stream);
+		/* clear commands */
+		stream->command = 0x0;
 
 		if (o_filewrite) {
 			command_set(CMD_CAPT_RUN , stream);
 			command_clr(CMD_CAPT_STOP, stream);
-		} else {
-			command_clr(CMD_CAPT_RUN , stream);
-			command_clr(CMD_CAPT_STOP, stream);
 		}
 
-		if (o_pdm_capt)
-			command_set(CMD_CAPT_PDM, stream);
-		else
-			command_clr(CMD_CAPT_PDM, stream);
+		if (o_capt_pdm) command_set(CMD_CAPT_PDMOUT , stream);
+		if (o_capt_raw) command_set(CMD_CAPT_RAWFORM, stream);
+		if (o_aec_proc) command_set(CMD_AEC_PROCESS , stream);
 
-		if (o_aec_proc)
-			command_set(CMD_EC_PROCESS, stream);
-		else
-			command_clr(CMD_EC_PROCESS, stream);
-
-		if (o_aec_dbg)
-			command_set(CMD_EC_DEBUG, stream);
-		else
-			command_clr(CMD_EC_DEBUG, stream);
-
-		if (o_rawformat)
-			command_clr(CMD_CAPTURE_WAVF, stream);
-		else
-			command_set(CMD_CAPTURE_WAVF, stream);
+		if (o_capt_path)
+			strcpy(stream->file_path, path);
 
 		/* default pdm capture */
 #ifdef DEF_PDM_DUMP_RUN
 		if (stream->pcm_name && !strcmp("PDM Transfer", stream->pcm_name))
 			command_set(CMD_CAPT_RUN, stream);
 #endif
-		printf("THREAD: %s [CMD:0x%x] , stack:%d\n",
-			stream->pcm_name, stream->command, (int)stacksize);
+		printf("<%4d> THREAD: %s [CMD:0x%x]\n", gettid(), stream->pcm_name, stream->command);
 
-		if (0 != pthread_create(&stream->thread, &attr, stream->fnc, (void*)stream)) {
+		if (0 != pthread_create(&thread[i], &attr, stream->func, (void*)stream)) {
     		printf("fail, thread.%d create, %s \n", i, strerror(errno));
   			goto exit_threads;
 		}
@@ -1084,17 +1216,14 @@ int main(int argc, char **argv)
 	/*
 	 * detect rate change thread
 	 */
-	if (0 != pthread_create(&streams[th_num].thread,
-				&attr,  audio_rate_detector, (void*)streams)) {
+	if (0 != pthread_create(&thread[th_num], &attr,  audio_rate_detector, (void*)streams)) {
    		printf("fail, thread.%d create (detector), %s \n", th_num, strerror(errno));
 		goto exit_threads;
 	}
 #endif
 
 	if (false == o_inargument) {
-		while (1) {
-			sleep(1);
-		}
+		do { sleep(1); } while (1);
 	}
 
 	stream_wait_ready(500);
@@ -1126,20 +1255,18 @@ int main(int argc, char **argv)
 		}
 
 		if (cmd_compare("n", cmd)) {
-			streams_command(CMD_REINIT, true, streams);
+			streams_command(CMD_STREAM_REINIT, true, streams);
 			continue;
 		}
 
 		if (cmd_compare("d", cmd)) {
-			o_aec_dbg = (o_aec_dbg ? false : true);
-			streams_command(CMD_EC_DEBUG, o_aec_dbg, streams);
+			streams_command(CMD_STREAM_NODATA, true, streams);
 			continue;
 		}
 
-		int ch = strtol(cmd, NULL, 10);
-		if ((qcounts + 1) > ch) {
-			printf("change in [%d -> %d]\n", command_out_channel, ch);
-			command_out_channel = ch;
+		if (cmd_compare("e", cmd)) {
+			streams_command(CMD_STREAM_NODATA, false, streams);
+			continue;
 		}
 	}
 
@@ -1147,7 +1274,7 @@ int main(int argc, char **argv)
 	 * Exit All threads
 	 */
 	printf("EXIT...\n");
-	streams_command(CMD_EXIT, true, streams);
+	streams_command(CMD_STREAM_EXIT, true, streams);
 
 exit_threads:
 
@@ -1155,12 +1282,12 @@ exit_threads:
  	 * Free attribute and wait for the other threads
  	 */
 	for (i = 0; NR_THREADS > i; i++) {
-		if (streams[i].thread) {
-			printf("Cancel [%d] %s \n", i, streams[i].pcm_name);
-			pthread_cancel(streams[i].thread);
-			pthread_join(streams[i].thread, (void **)&ret);
+		if (thread[i]) {
+			printf("Cancel [%d] %s\n", i, streams[i].pcm_name);
+			pthread_cancel(thread[i]);
+			pthread_join(thread[i], (void **)&ret);
 			audio_stream_release(&streams[i]);
-			printf("Done   [%d] %s ...\n", i, streams[i].pcm_name);
+			printf("Done   [%d] %s\n", i, streams[i].pcm_name);
 		}
 	}
 

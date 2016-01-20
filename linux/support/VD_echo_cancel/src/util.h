@@ -52,7 +52,12 @@ __STATIC__ inline void list_add(struct list_entry *list, struct list_entry *head
 }
 
 /***************************************************************************************/
-#if 0
+#if 1
+#include <sched.h> 			/* schedule */
+#include <sys/resource.h>
+#include <linux/sched.h> 	/* SCHED_NORMAL, SCHED_FIFO, SCHED_RR, SCHED_BATCH */
+
+// set_new_scheduler(getpid(), SCHED_FIFO, 99)
 __STATIC__ int set_new_scheduler(pid_t pid, int policy, int priority)
 {
 	struct sched_param param;

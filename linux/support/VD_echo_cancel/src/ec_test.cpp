@@ -110,7 +110,7 @@ extern "C" {
 #define	PCM_I2S_PERIOD_SIZE		32		// 16, 32
 
 #define	PCM_UAC_PERIOD_BYTES	4096	// 8192, 4096
-#define	PCM_UAC_PERIOD_SIZE		32		// 16, 32
+#define	PCM_UAC_PERIOD_SIZE		16		// 16, 32
 
 #define NR_THREADS  			10
 #define NR_QUEUEBUFF  			10
@@ -165,6 +165,7 @@ struct audio_stream {
 	int wav_files;
 	bool rate_changed;
 	char dbg_message[256];
+	int value;
 };
 
 #define	CH_2	2
@@ -620,6 +621,8 @@ __reinit:
 
 	pr_debug("<%4d> CTRN: %s INIT DONE\n", tid, stream->pcm_name);
 
+	set_new_scheduler(tid, SCHED_FIFO, 99);
+
 	while (!command_val((CMD_STREAM_EXIT|CMD_STREAM_REINIT), stream)) {
 
 		if (command_val(CMD_CAPT_RUN, stream)) {
@@ -753,17 +756,26 @@ __reinit:
 			}
 		}
 
+#if 1
 		/* Copy to playback */
 		OBuffer = pOBuf->PushBuffer(aec_buf_bytes, 1);
 		if (OBuffer) {
 			/* copy AEC out */
-		#if 0
-			memcpy(OBuffer, Out_PCM, aec_buf_bytes);
-		#else
-			memcpy(OBuffer, In_Ref[0], aec_buf_bytes);
-		#endif
+			int *src;
+			switch(stream->value) {
+				case  0:	src = (int*)Out_PCM  ; break;
+				case  1:	src = (int*)In_Buf[0]; break;
+				case  2:	src = (int*)In_Buf[1]; break;
+				case  3:	src = (int*)In_Ref[0]; break;
+				case  4:	src = (int*)In_Ref[1]; break;
+				case  5:
+				default: src = (int*)Out_PCM;
+						stream->value = 0; break;
+			}
+			memcpy(OBuffer, src, aec_buf_bytes);
 			pOBuf->PushRelease(aec_buf_bytes);
 		}
+#endif
 
 #ifdef SUPPORT_AEC_PCMOUT
 		if (t_min > td)
@@ -808,8 +820,7 @@ __STATIC__ void *audio_playback(void *data)
 	int periods = stream->periods;
 	int period_bytes = stream->period_bytes;
 
-	int qbuffers = 0, i = 0;
-	int WAIT_TIME = STREAM_WAIT_TIME;
+	int i = 0;
 
 	bool err;
 	int tid = gettid();
@@ -823,13 +834,12 @@ __STATIC__ void *audio_playback(void *data)
 			continue;
 		if (ps->qbuf) {
 			pIBuf = (CQBuffer *)ps->qbuf;
-			qbuffers++;
+			break;
 		}
 	}
-	assert(1 == qbuffers);
 
-	printf("<%4d> PLAY: %s, card:%d.%d %d hz period bytes[%4d] WAIT %dms\n",
-		tid, pcm, card, device, sample_rate, period_bytes, WAIT_TIME);
+	printf("<%4d> PLAY: %s, card:%d.%d %d hz period bytes[%4d]\n",
+		tid, pcm, card, device, sample_rate, period_bytes);
 	printf("<%4d> PLAY: AEC [%s] !!!\n",
 		tid, command_val(CMD_AEC_PROCESS, stream) ? "RUN":"STOP");
 
@@ -1026,6 +1036,17 @@ __STATIC__ void streams_command(unsigned int cmd, bool set, struct audio_stream 
 	}
 }
 
+__STATIC__ void streams_value(int value, struct audio_stream *streams)
+{
+	for (int i = 0; NR_THREADS > i; i++) {
+		if (streams[i].is_valid) {
+			pthread_mutex_lock(&streams[i].lock);
+			streams[i].value = value;
+			pthread_mutex_unlock(&streams[i].lock);
+		}
+	}
+}
+
 __STATIC__ void	stream_wait_ready(int msec)
 {
 	usleep(msec*1000);
@@ -1078,6 +1099,7 @@ __STATIC__ void print_cmd_usage(void)
     printf("'s'	  : start catpture \n");
     printf("'t'	  : stop  catpture \n");
     printf("'n'	  : init  devices \n");
+    printf("'num' : output channel (0:AEC, 1:PDM0, 2:PDM1, 3:I2S0, 4:I2S1) \n");
 }
 
 #define	cmd_compare(s, c)	(0 == strncmp(s, c, strlen(c)-1))
@@ -1268,6 +1290,9 @@ int main(int argc, char **argv)
 			streams_command(CMD_STREAM_NODATA, false, streams);
 			continue;
 		}
+
+		int ch = strtol(cmd, NULL, 10);
+		streams_value(ch, streams);
 	}
 
 	/*

@@ -704,7 +704,7 @@ __reinit:
 			short *d  = (short *)ISYNC;
 			short *s0 = (short *)In_Buf[0];	// INP: PDM0
 			short *s1 = (short *)In_Ref[0];	// INP: PDM
-			short *s2 = (short *)In_Buf[0];	// REF: I2S0
+			short *s2 = (short *)In_Buf[1];	// REF: I2S0
 			short *s3 = (short *)In_Ref[1];	// REF: I2S1
 
 			s1++, s3++;	/* for I2S Right */

@@ -120,7 +120,7 @@ extern "C" {
 
 #define RUN_CPUFREQ_KHZ			1200000
 #define WAV_SAVE_PERIOD			(512*1024)		/* 51Kbyte */
-#define STREAM_MONITOR_PERIOD	(3*1000*1000)	/* US */
+#define STREAM_MONITOR_PERIOD	(5*1000*1000)	/* US */
 #define	PCM_I2S_START_RATE		(16000)			/* For detect */
 
 #include "uevent.h"
@@ -219,6 +219,15 @@ static void stream_debug(char *buffer, const char *fmt, ...)
 /***************************************************************************************/
 static int __i2s_sample_rate = PCM_I2S_START_RATE;
 
+/*
+ * capture time
+ * stop  -> start : 4~5ms
+ * I2S start
+ * DMA I2S 4096 bytes (21.3) -> resample 1328
+ * DMA I2S 4096 bytes (21.3) -> resample 2692
+ * DMA I2S 4096 bytes (21.3) -> resample 4056
+ * DMA I2S 4096 bytes (21.3) -> resample 5424 ---> return pcm_read : 85.2 ms
+ */
 __STATIC__ void *audio_capture(void *data)
 {
 	struct audio_stream *stream = (struct audio_stream *)data;;

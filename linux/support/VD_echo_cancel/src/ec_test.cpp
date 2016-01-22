@@ -109,12 +109,11 @@ extern "C" {
 #define	PCM_I2S_PERIOD_BYTES	4096	// 8192, 4096
 #define	PCM_I2S_PERIOD_SIZE		32		// 16, 32
 
-#define	PCM_UAC_PERIOD_BYTES	4096	// 8192, 4096
-#define	PCM_UAC_PERIOD_SIZE		16		// 16, 32
+#define	PCM_UAC_PERIOD_BYTES	4096	// FIX: For UAC
+#define	PCM_UAC_PERIOD_SIZE		16		// FIX: For UAC
 
-#define NR_THREADS  			10
-#define NR_QUEUEBUFF  			10
-#define	STREAM_WAIT_TIME		(1)
+#define MAX_THREADS  			10
+#define MAX_QUEUEBUFF  			10
 
 #define	STREAM_BUFF_SIZE_MULTI	(2)
 
@@ -176,6 +175,16 @@ struct audio_stream {
 #define	SAMPLE_BITS_24	24
 
 #define	MSLEEP(m)		usleep(m*1000)
+
+static pthread_mutex_t 	stream_lock;
+#define	STREAM_LOCK_INIT()	do { pthread_mutex_init(&stream_lock, NULL); } while (0)
+#define	STREAM_LOCK(s)		do {	\
+		if (s->type == STREAM_CAPTURE_I2S) pthread_mutex_lock(&stream_lock);	\
+	} while (0)
+
+#define	STREAM_UNLOCK(s)	do {	\
+		if (s->type == STREAM_CAPTURE_I2S) pthread_mutex_unlock(&stream_lock);	\
+	} while (0)
 
 static inline bool command_val(unsigned int c, struct audio_stream *s)
 {
@@ -279,8 +288,13 @@ __reinit:
 	command_clr(CMD_STREAM_NODATA, stream);
 	period_bytes = pRec->GetPeriodBytes();
 
-	if (pRec)
+	stream_debug(stream->dbg_message, "(%s:%d)", __FUNCTION__, __LINE__);
+	if (pRec) {
+		STREAM_LOCK(stream);
 		pRec->Start();
+		STREAM_UNLOCK(stream);
+	}
+	stream_debug(stream->dbg_message, "(%s:%d)", __FUNCTION__, __LINE__);
 
 	pr_debug("<%4d> CAPT: %s INIT DONE\n", tid, stream->pcm_name);
 
@@ -298,9 +312,11 @@ __reinit:
 		if (NULL == Buffer)
 			continue;
 
+		stream_debug(stream->dbg_message, "(%s:%d)", __FUNCTION__, __LINE__);
 		ret = pRec->Capture(Buffer, period_bytes);
 		if (0 > ret)
 			continue;
+		stream_debug(stream->dbg_message, "(%s:%d)", __FUNCTION__, __LINE__);
 
 		if (is_1st_sample) {
 			END_TIMESTAMP_US(ts, td);
@@ -317,8 +333,10 @@ __reinit:
 	}
 
 	if (command_val(CMD_STREAM_REINIT, stream)) {
+		stream_debug(stream->dbg_message, "(%s:%d)", __FUNCTION__, __LINE__);
 		if (pRec)
 			pRec->Stop();
+		stream_debug(stream->dbg_message, "(%s:%d)", __FUNCTION__, __LINE__);
 		goto __reinit;
 	}
 
@@ -550,9 +568,9 @@ __STATIC__ void *audio_capture_aec(void *data)
 	struct audio_stream *stream = (struct audio_stream *)data;
 	struct list_entry *list, *Head = &stream->in_stream;
 	CQBuffer *pOBuf = (CQBuffer *)stream->qbuf;
-	CQBuffer *pIBuf[NR_QUEUEBUFF] = { NULL, };
+	CQBuffer *pIBuf[MAX_QUEUEBUFF] = { NULL, };
 
-	unsigned char *IBuffer[NR_QUEUEBUFF] = { NULL, };
+	unsigned char *IBuffer[MAX_QUEUEBUFF] = { NULL, };
 	unsigned char *OBuffer = NULL;
 
 	const char *pcm = stream->pcm_name;
@@ -565,7 +583,7 @@ __STATIC__ void *audio_capture_aec(void *data)
 	int period_bytes = stream->period_bytes;
 
 	int qbuffers = 0, f_no = 0, i = 0;
-	int WAIT_TIME = STREAM_WAIT_TIME;
+	int WAIT_TIME = 1;
 
 #ifdef SUPPORT_AEC_PCMOUT
 	long long ts = 0, td = 0, lp = 0;
@@ -1012,7 +1030,7 @@ __STATIC__ void *audio_rate_detector(void *data)
 			__i2s_sample_rate = PCM_I2S_START_RATE;
 		}
 
-		for (i = 0; NR_THREADS > i; i++) {
+		for (i = 0; MAX_THREADS > i; i++) {
 			if (!streams[i].is_valid)
 				continue;
 
@@ -1031,7 +1049,7 @@ __STATIC__ void *audio_rate_detector(void *data)
 
 __STATIC__ void streams_command(unsigned int cmd, bool set, struct audio_stream *streams)
 {
-	for (int i = 0; NR_THREADS > i; i++) {
+	for (int i = 0; MAX_THREADS > i; i++) {
 		if (streams[i].is_valid) {
 			pthread_mutex_lock(&streams[i].lock);
 			set ? streams[i].command |= cmd :
@@ -1047,7 +1065,7 @@ __STATIC__ void streams_command(unsigned int cmd, bool set, struct audio_stream 
 
 __STATIC__ void streams_value(int value, struct audio_stream *streams)
 {
-	for (int i = 0; NR_THREADS > i; i++) {
+	for (int i = 0; MAX_THREADS > i; i++) {
 		if (streams[i].is_valid) {
 			pthread_mutex_lock(&streams[i].lock);
 			streams[i].value = value;
@@ -1067,7 +1085,7 @@ static void *stream_monitor(void *arg)
 	while (1) {
 		usleep(STREAM_MONITOR_PERIOD);
 		printf("================================================================\n");
-		for(int i = 0 ; i < NR_THREADS ; i++) {
+		for(int i = 0 ; i < MAX_THREADS ; i++) {
 			CQBuffer *pQBuf = (CQBuffer *)pStreams[i].qbuf;
 			if( pQBuf ){
 				printf("[%24s] : AvailSize = %7d/%7d [%s]\n",
@@ -1117,8 +1135,8 @@ int main(int argc, char **argv)
 {
 	int opt;
 
-	struct audio_stream streams[NR_THREADS];
-	pthread_t thread[NR_THREADS];
+	struct audio_stream streams[MAX_THREADS];
+	pthread_t thread[MAX_THREADS];
 	pthread_attr_t attr;
 	size_t stacksize;
 
@@ -1206,9 +1224,10 @@ int main(int argc, char **argv)
    	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
    	pthread_attr_getstacksize (&attr, &stacksize);
 	audio_stream_monitor(streams);
+	STREAM_LOCK_INIT();
 
 	/* capture/play threads */
-	for (i = 0; NR_THREADS > i; i++) {
+	for (i = 0; MAX_THREADS > i; i++) {
 
 		struct audio_stream *stream = &streams[i];
 		if (false == stream->is_valid)
@@ -1315,7 +1334,7 @@ exit_threads:
  	/*
  	 * Free attribute and wait for the other threads
  	 */
-	for (i = 0; NR_THREADS > i; i++) {
+	for (i = 0; MAX_THREADS > i; i++) {
 		if (thread[i]) {
 			printf("Cancel [%d] %s\n", i, streams[i].pcm_name);
 			pthread_cancel(thread[i]);

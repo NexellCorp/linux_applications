@@ -129,10 +129,10 @@ int CAudioPlayer::PlayBack(unsigned char *buffer, int bytes)
 	return bytes;
 }
 
-int CAudioPlayer::Start(void)
+bool CAudioPlayer::Start(void)
 {
 	if (NULL == m_hPCM)
-		return -1;
+		return false;
 
 	struct pcm *pcm = m_hPCM;
 	int ret = pcm_start(pcm);
@@ -140,10 +140,10 @@ int CAudioPlayer::Start(void)
   	 	printf("E: cannot start channel <%s> (%s) ...\n",
   	           m_pcmName, pcm_get_error(pcm));
 
-    return ret;
+    return 0 > ret ? false  : true;
 }
 
-int CAudioPlayer::Stop(bool drop)
+bool CAudioPlayer::Stop(bool drop)
 {
 	if (NULL == m_hPCM)
 		return -1;
@@ -154,10 +154,10 @@ int CAudioPlayer::Stop(bool drop)
   	 	printf("E: cannot stop channel <%s> (%s) ...\n",
   	           m_pcmName, pcm_get_error(pcm));
 
-    return ret;
+    return 0 > ret ? false  : true;
 }
 
-int CAudioPlayer::Stop(void)
+bool CAudioPlayer::Stop(void)
 {
 	return Stop(true);
 }
@@ -242,7 +242,6 @@ bool CAudioPlayer::Open(const char *pcm_name, int card, int device,
 					int channels, int samplerate, int samplebits,
 					int periods, int periodbytes)
 {
-	snd_pcm_uframes_t start_threshold;
 	int err;
 
 	err = snd_pcm_open(&m_hPCM, pcm_name, m_Stream, 0);
@@ -401,7 +400,6 @@ int CAudioPlayer::Capture(unsigned char *buffer, int bytes)
 #if 1
 int CAudioPlayer::PlayBack(unsigned char *buffer, int bytes)
 {
-	snd_pcm_sframes_t avail, delay;
 	int framesize = bytes/m_FrameBytes;
 	int err;
 
@@ -455,23 +453,29 @@ int CAudioPlayer::PlayBack(unsigned char *buffer, int bytes)
 }
 #endif
 
-int CAudioPlayer::Start(void)
+bool CAudioPlayer::Start(void)
 {
 	if (NULL == m_hPCM)
 		return 0;
-
-	return snd_pcm_start(m_hPCM);;
+	int ret = snd_pcm_start(m_hPCM);
+	return 0 > ret ? false : true;
 }
 
-int CAudioPlayer::Stop(bool drop)
+bool CAudioPlayer::Stop(bool drop)
 {
 	if (NULL == m_hPCM)
 		return -1;
 
-	return true == drop ? snd_pcm_drop(m_hPCM) : snd_pcm_drain(m_hPCM);
+	int ret;
+	if (true == drop)
+		ret = snd_pcm_drop(m_hPCM);
+	else
+		ret = snd_pcm_drain(m_hPCM);
+
+	return 0 > ret ? false : true;
 }
 
-int CAudioPlayer::Stop(void)
+bool CAudioPlayer::Stop(void)
 {
 	return Stop(true);
 }

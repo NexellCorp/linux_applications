@@ -24,9 +24,9 @@ public:
 	void Close(void);
 	int  Capture (unsigned char *buffer, int bytes);
 	int  PlayBack(unsigned char *buffer, int bytes);
-	int  Start(void);
-	int  Stop (bool drop);
-	int  Stop (void);
+	bool Start(void);
+	bool Stop (bool drop);
+	bool Stop (void);
 
 	int  GetChannels(void);
 	int  GetSamplRate(void);
@@ -47,8 +47,8 @@ private:
 	snd_pcm_t *m_hPCM;
 	snd_pcm_hw_params_t *m_pHWParam;
 	snd_pcm_sw_params_t *m_pSWParam;
-	snd_pcm_format_t m_PCMFormat;
 	snd_pcm_access_t m_HWAccess;
+	snd_pcm_format_t m_PCMFormat;
 	snd_pcm_stream_t m_Stream;
 	snd_pcm_uframes_t 	m_PeriodBytes, m_ReqPeriodBytes;
 #endif

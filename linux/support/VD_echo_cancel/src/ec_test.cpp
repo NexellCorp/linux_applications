@@ -252,28 +252,22 @@ __STATIC__ void *audio_capture(void *data)
 	int sample_bits = stream->sample_bits;
 	int periods = stream->periods;
 	int period_bytes = stream->period_bytes;
-	int retry = 2;
+	int retry_nr = 2;
 	bool err;
 
 	long long ts = 0, td = 0;
 	int  tid = gettid();
 	int  ret = 0;
 
-	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
-	pthread_setcanceltype (PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
-
 	printf("<%4d> CAPT: %s, card:%d.%d %d hz period bytes[%4d], Q[%p]\n",
 		tid, pcm, card, device, sample_rate, period_bytes, pOBuf);
 	printf("<%4d> CAPT: OUT[%p] %s\n", tid, pOBuf, pOBuf->GetBufferName());
 
-	for (int i = 0; retry > i; i++) {
-		err = pRec->Open(pcm, card, device, channels,
-						sample_rate, sample_bits, periods, period_bytes);
-		if (true == err)
-			break;
-		printf("<%4d> [%d] retry open: %s\n", tid, i, pcm);
-	}
+	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
+	pthread_setcanceltype (PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
 
+	err = pRec->Open(pcm, card, device, channels,
+					sample_rate, sample_bits, periods, period_bytes);
 	if (false == err)
 		return NULL;
 
@@ -290,9 +284,14 @@ __reinit:
 
 	stream_debug(stream->dbg_message, "(%s:%d)", __FUNCTION__, __LINE__);
 	if (pRec) {
-		STREAM_LOCK(stream);
-		pRec->Start();
-		STREAM_UNLOCK(stream);
+		for (int i = 0; retry_nr > i; i++) {
+			STREAM_LOCK(stream);
+			err = pRec->Start();
+			STREAM_UNLOCK(stream);
+			if (true == err)
+				break;
+			printf("<%4d> [%d] retry start: %s\n", tid, i, pcm);
+		}
 	}
 	stream_debug(stream->dbg_message, "(%s:%d)", __FUNCTION__, __LINE__);
 

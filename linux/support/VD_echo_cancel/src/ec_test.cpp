@@ -22,8 +22,8 @@ extern "C" {
 #else
 #define	pr_debug(m...)
 #endif
+
 /***************************************************************************************/
-//#define SUPPORT_PDM_IN_DUMP
 #define SUPPORT_PDM_AGC
 //#define DEF_PDM_DUMP_RUN
 
@@ -138,9 +138,10 @@ extern "C" {
 #define	CMD_STREAM_NODATA		(1<<2)
 #define	CMD_CAPT_RUN			(1<<3)
 #define	CMD_CAPT_STOP			(1<<4)
-#define	CMD_CAPT_PDMOUT			(1<<5)
+#define	CMD_CAPT_PDMAGC			(1<<5)
 #define	CMD_CAPT_RAWFORM		(1<<6)
 #define	CMD_AEC_PROCESS			(1<<7)
+#define	CMD_CAPT_PDMRAW			(1<<8)
 
 struct audio_stream {
 	const char *pcm_name;	/* for ALSA */
@@ -211,7 +212,7 @@ static inline void command_clr(unsigned int c, struct audio_stream *s)
 	pthread_mutex_unlock(&s->lock);
 }
 
-#if 0
+#if 1
 static void stream_debug(char *buffer, const char *fmt, ...)
 {
 	if (NULL == buffer)
@@ -400,14 +401,10 @@ __STATIC__ void *audio_pdm_transfer(void *data)
 	int sample_bits = stream->sample_bits;
 	bool b_FileSave = false;
 
-#ifdef SUPPORT_PDM_IN_DUMP
 	CWAVFile *pIWav = new CWAVFile(WAV_SAVE_PERIOD);
-#endif
 	CWAVFile *pOWav[2] = { new CWAVFile(WAV_SAVE_PERIOD), new CWAVFile(WAV_SAVE_PERIOD), };
 
-#ifdef SUPPORT_PDM_IN_DUMP
 	stream->WavFile[0] = pIWav;
-#endif
 	stream->WavFile[1] = pOWav[0];
 	stream->WavFile[2] = pOWav[1];
 	stream->wav_files  = 3;
@@ -451,12 +448,13 @@ __reinit:
 
 	while (!command_val((CMD_STREAM_EXIT|CMD_STREAM_REINIT), stream)) {
 
-		if (command_val(CMD_CAPT_PDMOUT, stream) &&
+		if (command_val(CMD_CAPT_PDMAGC, stream) &&
 			command_val(CMD_CAPT_RUN, stream)) {
 			bool bWAV = command_val(CMD_CAPT_RAWFORM, stream) ? false : true;
-#ifdef SUPPORT_PDM_IN_DUMP
-			pIWav->Open(bWAV, channels, sample_rate, sample_bits, "%s/%s", path, "pdm_i.wav");
-#endif
+
+			if (command_val(CMD_CAPT_PDMRAW, stream))
+				pIWav->Open(bWAV, channels, sample_rate, sample_bits, "%s/%s", path, "pdm_i.wav");
+
 			pOWav[0]->Open(bWAV, channels/2, sample_rate, sample_bits, "%s/pdm_o_%d.wav", path, 0);
 			pOWav[1]->Open(bWAV, channels/2, sample_rate, sample_bits, "%s/pdm_o_%d.wav", path, 1);
 
@@ -465,10 +463,12 @@ __reinit:
 		}
 
 		if (command_val(CMD_CAPT_STOP, stream)) {
-#ifdef SUPPORT_PDM_IN_DUMP
-			pIWav->Close();
-#endif
-			pOWav[0]->Close(), pOWav[1]->Close();;
+			if (command_val(CMD_CAPT_PDMRAW, stream))
+				pIWav->Close();
+
+			pOWav[0]->Close();
+			pOWav[1]->Close();;
+
 			command_clr((CMD_CAPT_STOP), stream);
 			b_FileSave = false;
 		}
@@ -491,10 +491,8 @@ __reinit:
 		if (NULL == IBuffer)
 			continue;
 
-#ifdef SUPPORT_PDM_IN_DUMP
-		if (b_FileSave)
+		if (b_FileSave && command_val(CMD_CAPT_PDMRAW, stream))
 			pIWav->Write(IBuffer, PCM_PDM_TR_INP_BYTES);
-#endif
 
 		/*
 		 * PDM data AGC and split save output buffer
@@ -527,9 +525,7 @@ __reinit:
 	if (command_val(CMD_STREAM_REINIT, stream))
 		goto __reinit;
 
-#ifdef SUPPORT_PDM_IN_DUMP
 	pIWav->Close();
-#endif
 	pOWav[0]->Close();
 	pOWav[1]->Close();
 
@@ -1115,6 +1111,7 @@ __STATIC__ void print_usage(void)
     printf("-i not wait in argument \n");
     printf("-w start file capture \n");
     printf("-p skip pdm capute, with '-w' \n");
+    printf("-r pdm raw dump enable \n");
 }
 
 __STATIC__ void print_cmd_usage(void)
@@ -1149,19 +1146,21 @@ int main(int argc, char **argv)
 	bool o_inargument = true;
 	bool o_aec_proc = true;
 	bool o_capt_path = false;
-	bool o_capt_raw = false;
+	bool o_raw_form = false;
 	bool o_filewrite = false;
-	bool o_capt_pdm = true;
+	bool o_pdm_agc = true;
+	bool o_pdm_raw = false;
 
 	memset(streams, 0x0, sizeof(streams));
 
-    while (-1 != (opt = getopt(argc, argv, "hefipwc:"))) {
+    while (-1 != (opt = getopt(argc, argv, "hefiprwc:"))) {
 		switch(opt) {
         case 'e':   o_aec_proc = false;			break;
-        case 'f':   o_capt_raw = true;			break;
+        case 'f':   o_raw_form = true;			break;
         case 'i':   o_inargument = false;		break;
        	case 'w':   o_filewrite = true;			break;
-       	case 'p':   o_capt_pdm = false;			break;
+       	case 'p':   o_pdm_agc = false;			break;
+       	case 'r':   o_pdm_raw = true;			break;
        	case 'c':   o_capt_path = true;
        				strcpy(path, optarg);
        				break;
@@ -1240,8 +1239,9 @@ int main(int argc, char **argv)
 			command_clr(CMD_CAPT_STOP, stream);
 		}
 
-		if (o_capt_pdm) command_set(CMD_CAPT_PDMOUT , stream);
-		if (o_capt_raw) command_set(CMD_CAPT_RAWFORM, stream);
+		if (o_pdm_agc ) command_set(CMD_CAPT_PDMAGC , stream);
+		if (o_pdm_raw ) command_set(CMD_CAPT_PDMRAW , stream);
+		if (o_raw_form) command_set(CMD_CAPT_RAWFORM, stream);
 		if (o_aec_proc) command_set(CMD_AEC_PROCESS , stream);
 
 		if (o_capt_path)

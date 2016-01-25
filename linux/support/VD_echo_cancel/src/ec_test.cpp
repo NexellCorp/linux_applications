@@ -1048,7 +1048,7 @@ __STATIC__ void *audio_rate_detector(void *data)
 		}
 
 		if (udev.sample_frame && !strcmp(udev.sample_frame, "YES")) {
-			printf("***** (%6ld.%06ld s) Sample NO DATA *****\n", tv.tv_sec, tv.tv_usec);
+			printf("***** (%6ld.%06ld s) Sample NO LRCLK *****\n", tv.tv_sec, tv.tv_usec);
 			b_no_data = true;
 			__i2s_sample_rate = PCM_I2S_START_RATE;
 		}

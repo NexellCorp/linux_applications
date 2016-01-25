@@ -52,7 +52,7 @@ __STATIC__ inline void list_add(struct list_entry *list, struct list_entry *head
 }
 
 /***************************************************************************************/
-#if 1
+#ifdef SUPPORT_RT_SCHEDULE
 #include <sched.h> 			/* schedule */
 #include <sys/resource.h>
 #include <linux/sched.h> 	/* SCHED_NORMAL, SCHED_FIFO, SCHED_RR, SCHED_BATCH */

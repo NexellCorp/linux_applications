@@ -9,6 +9,7 @@
 #include "audioplay.h"
 #include "qbuff.h"
 #include "wav.h"
+//#define SUPPORT_RT_SCHEDULE
 #include "util.h"
 #include "../lib/nx_pdm.h"
 
@@ -24,6 +25,7 @@ extern "C" {
 #endif
 
 /***************************************************************************************/
+#define CLEAR_1ST_LAST_SAMPLE
 #define SUPPORT_PDM_AGC
 //#define DEF_PDM_DUMP_RUN
 
@@ -179,6 +181,8 @@ struct audio_stream {
 
 static pthread_mutex_t 	stream_lock;
 #define	STREAM_LOCK_INIT()	do { pthread_mutex_init(&stream_lock, NULL); } while (0)
+
+#if 0
 #define	STREAM_LOCK(s)		do {	\
 		if (s->type == STREAM_CAPTURE_I2S) pthread_mutex_lock(&stream_lock);	\
 	} while (0)
@@ -186,7 +190,15 @@ static pthread_mutex_t 	stream_lock;
 #define	STREAM_UNLOCK(s)	do {	\
 		if (s->type == STREAM_CAPTURE_I2S) pthread_mutex_unlock(&stream_lock);	\
 	} while (0)
+#else
+#define	STREAM_LOCK(s)		do {	\
+		pthread_mutex_lock(&stream_lock);	\
+	} while (0)
 
+#define	STREAM_UNLOCK(s)	do {	\
+		pthread_mutex_unlock(&stream_lock);	\
+	} while (0)
+#endif
 static inline bool command_val(unsigned int c, struct audio_stream *s)
 {
 	assert(s);
@@ -324,8 +336,19 @@ __reinit:
 			gettimeofday(&tv, NULL);
 			printf("[%6ld.%06ld s] <%4d> [CAPT] capt [%4d][%3lld.%03lld ms] %s\n",
 				tv.tv_sec, tv.tv_usec, tid, period_bytes, td/1000, td%1000, stream->pcm_name);
+
+#ifdef CLEAR_1ST_LAST_SAMPLE
+			/* Clear 1st sample */
+			memset(Buffer, 0, period_bytes);
+#endif
 			is_1st_sample = false;
 		}
+
+#ifdef CLEAR_1ST_LAST_SAMPLE
+		/* Clear last sample */
+		if (command_val(CMD_STREAM_EXIT|CMD_STREAM_REINIT, stream))
+			memset(Buffer, 0, period_bytes);
+#endif
 
 		pOBuf->PushRelease(period_bytes);
 		pr_debug("<%4d> [CAPT] %s %d %s\n",
@@ -643,7 +666,9 @@ __reinit:
 
 	pr_debug("<%4d> CTRN: %s INIT DONE\n", tid, stream->pcm_name);
 
+#ifdef SUPPORT_RT_SCHEDULE
 	set_new_scheduler(tid, SCHED_FIFO, 99);
+#endif
 
 	while (!command_val((CMD_STREAM_EXIT|CMD_STREAM_REINIT), stream)) {
 
@@ -842,7 +867,7 @@ __STATIC__ void *audio_playback(void *data)
 	int periods = stream->periods;
 	int period_bytes = stream->period_bytes;
 
-	int i = 0;
+	int i = 0, ret = 0;
 
 	bool err;
 	int tid = gettid();
@@ -887,8 +912,11 @@ __reinit:
 		if (NULL == Buffer)
 			continue;
 
-		if (pPlay)
-			pPlay->PlayBack((unsigned char*)Buffer, period_bytes);
+		if (pPlay) {
+			ret = pPlay->PlayBack((unsigned char*)Buffer, period_bytes);
+			if (0 > ret)
+				MSLEEP(15);
+		}
 
 		pIBuf->PopRelease(period_bytes);
 	}

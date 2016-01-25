@@ -7,7 +7,7 @@
 #define NUM_SAMPLE 		256
 #define SAMPLE_FREQ		16000
 
-short 	LPFBuf[1024] = { 0, };
+int 	LPFBuf[1024] = { 0, };
 
 int 				agc_st_frames		;
 long int 			agc_st_sum 		;
@@ -122,7 +122,7 @@ void  agc_Run (
 	for (int i=0; i<NUM_SAMPLE; ++i){
 		value= (LPFBuf[i]*agc_st_IntpGain)>>9;
 		if (value>32767) value= 32767;
-		else if (value<-32786) value= -32768;
+		else if (value<-32768) value= -32768;
 		ioBuf[i]= value;
 	}
 
@@ -152,7 +152,7 @@ void  agc_Run2 (
 	for (int i=0; i<NUM_SAMPLE; ++i){
 		value= (LPFBuf[i]*agc_st_IntpGain)>>9;
 		if (value>32767) value= 32767;
-		else if (value<-32786) value= -32768;
+		else if (value<-32768) value= -32768;
 		ioBuf[i]= value;
 	}
 }

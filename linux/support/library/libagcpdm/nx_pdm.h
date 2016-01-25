@@ -11,7 +11,7 @@ typedef struct {
 } pdmLPF_STATDEF;
 
 void PDM_LPF_Init ( pdmLPF_STATDEF *lpf_st );
-void PDM_LPF_Run ( pdmLPF_STATDEF *lpf_st, short *pOutBuf, short *pInBuf, int len);
+void PDM_LPF_Run ( pdmLPF_STATDEF *lpf_st, int *pOutBuf, short *pInBuf, int len);
 /***************************************************************************************/
 
 /*-------------------------------*/

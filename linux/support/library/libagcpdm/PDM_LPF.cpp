@@ -23,7 +23,7 @@ void PDM_LPF_Init ( pdmLPF_STATDEF *lpf_st )
 		lpf_st->GeneratedFilterBlock_states[i]= 0;
 }
 
-void PDM_LPF_Run ( pdmLPF_STATDEF *lpf_st, short *pOutBuf, short *pInBuf, int len)
+void PDM_LPF_Run ( pdmLPF_STATDEF *lpf_st, int *pOutBuf, short *pInBuf, int len)
 {
 	if (1)
 	{
@@ -41,7 +41,7 @@ void PDM_LPF_Run ( pdmLPF_STATDEF *lpf_st, short *pOutBuf, short *pInBuf, int le
 				accumulator += GeneratedFilterBlock_Coefficien[(i + j) + 1] *
 								lpf_st->GeneratedFilterBlock_states[j];
 			}
-			pOutBuf[i] = (short)(accumulator>>13);// >> (18-4));
+			pOutBuf[i] = (accumulator>>15);// >> (18-4));
 		}
 
 		/* Consume remaining input samples */
@@ -51,7 +51,7 @@ void PDM_LPF_Run ( pdmLPF_STATDEF *lpf_st, short *pOutBuf, short *pInBuf, int le
 				accumulator += pInBuf[i - j] * GeneratedFilterBlock_Coefficien[j];
 			}
 
-			pOutBuf[i] = (short)(accumulator>>13);// >> (18-4) );
+			pOutBuf[i] = (accumulator>>15);// >> (18-4) );
 			i++;
 		}
 

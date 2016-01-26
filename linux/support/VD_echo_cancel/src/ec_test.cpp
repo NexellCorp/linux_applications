@@ -224,7 +224,7 @@ static inline void command_clr(unsigned int c, struct audio_stream *s)
 	pthread_mutex_unlock(&s->lock);
 }
 
-#if 1
+#if 0
 static void stream_debug(char *buffer, const char *fmt, ...)
 {
 	if (NULL == buffer)
@@ -295,7 +295,6 @@ __reinit:
 	command_clr(CMD_STREAM_NODATA, stream);
 	period_bytes = pRec->GetPeriodBytes();
 
-	stream_debug(stream->dbg_message, "(%s:%d)", __FUNCTION__, __LINE__);
 	if (pRec) {
 		for (int i = 0; retry_nr > i; i++) {
 			STREAM_LOCK(stream);
@@ -306,7 +305,6 @@ __reinit:
 			printf("<%4d> [%d] retry start: %s\n", tid, i, pcm);
 		}
 	}
-	stream_debug(stream->dbg_message, "(%s:%d)", __FUNCTION__, __LINE__);
 
 	pr_debug("<%4d> CAPT: %s INIT DONE\n", tid, stream->pcm_name);
 
@@ -324,11 +322,9 @@ __reinit:
 		if (NULL == Buffer)
 			continue;
 
-		stream_debug(stream->dbg_message, "(%s:%d)", __FUNCTION__, __LINE__);
 		ret = pRec->Capture(Buffer, period_bytes);
-		if (0 > ret)
+		if (0 > ret) 
 			continue;
-		stream_debug(stream->dbg_message, "(%s:%d)", __FUNCTION__, __LINE__);
 
 		if (is_1st_sample) {
 			END_TIMESTAMP_US(ts, td);
@@ -356,10 +352,8 @@ __reinit:
 	}
 
 	if (command_val(CMD_STREAM_REINIT, stream)) {
-		stream_debug(stream->dbg_message, "(%s:%d)", __FUNCTION__, __LINE__);
 		if (pRec)
 			pRec->Stop();
-		stream_debug(stream->dbg_message, "(%s:%d)", __FUNCTION__, __LINE__);
 		goto __reinit;
 	}
 

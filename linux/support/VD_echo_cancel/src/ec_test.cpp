@@ -111,8 +111,8 @@ extern "C" {
 #define	PCM_I2S_PERIOD_BYTES	4096	// 8192, 4096
 #define	PCM_I2S_PERIOD_SIZE		32		// 16, 32
 
-#define	PCM_UAC_PERIOD_BYTES	4096	// FIX: For UAC
-#define	PCM_UAC_PERIOD_SIZE		16		// FIX: For UAC
+#define	PCM_UAC_PERIOD_BYTES	1024	// FIX: 1024 or 4096
+#define	PCM_UAC_PERIOD_SIZE		16		// FIX: For UAC (UAC)
 
 #define MAX_THREADS  			10
 #define MAX_QUEUEBUFF  			10
@@ -915,7 +915,7 @@ __reinit:
 		if (pPlay) {
 			ret = pPlay->PlayBack((unsigned char*)Buffer, period_bytes);
 			if (0 > ret)
-				MSLEEP(3);
+				MSLEEP(1);
 		}
 
 		pIBuf->PopRelease(period_bytes);

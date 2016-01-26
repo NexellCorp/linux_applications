@@ -111,13 +111,13 @@ extern "C" {
 #define	PCM_I2S_PERIOD_BYTES	4096	// 8192, 4096
 #define	PCM_I2S_PERIOD_SIZE		32		// 16, 32
 
-#define	PCM_UAC_PERIOD_BYTES	1024	// FIX: 1024 or 4096
+#define	PCM_UAC_PERIOD_BYTES	4096	// FIX: 1024 or 4096
 #define	PCM_UAC_PERIOD_SIZE		16		// FIX: For UAC (UAC)
 
 #define MAX_THREADS  			10
 #define MAX_QUEUEBUFF  			10
 
-#define	STREAM_BUFF_SIZE_MULTI	(3)
+#define	STREAM_BUFF_SIZE_MULTI	(2)
 
 #define RUN_CPUFREQ_KHZ			1200000
 #define WAV_SAVE_PERIOD			(512*1024)		/* 51Kbyte */
@@ -199,6 +199,7 @@ static pthread_mutex_t 	stream_lock;
 		pthread_mutex_unlock(&stream_lock);	\
 	} while (0)
 #endif
+
 static inline bool command_val(unsigned int c, struct audio_stream *s)
 {
 	assert(s);

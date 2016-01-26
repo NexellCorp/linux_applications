@@ -117,7 +117,7 @@ extern "C" {
 #define MAX_THREADS  			10
 #define MAX_QUEUEBUFF  			10
 
-#define	STREAM_BUFF_SIZE_MULTI	(2)
+#define	STREAM_BUFF_SIZE_MULTI	(3)
 
 #define RUN_CPUFREQ_KHZ			1200000
 #define WAV_SAVE_PERIOD			(512*1024)		/* 51Kbyte */
@@ -323,7 +323,7 @@ __reinit:
 			continue;
 
 		ret = pRec->Capture(Buffer, period_bytes);
-		if (0 > ret) 
+		if (0 > ret)
 			continue;
 
 		if (is_1st_sample) {
@@ -332,19 +332,8 @@ __reinit:
 			gettimeofday(&tv, NULL);
 			printf("[%6ld.%06ld s] <%4d> [CAPT] capt [%4d][%3lld.%03lld ms] %s\n",
 				tv.tv_sec, tv.tv_usec, tid, period_bytes, td/1000, td%1000, stream->pcm_name);
-
-#ifdef CLEAR_1ST_LAST_SAMPLE
-			/* Clear 1st sample */
-			memset(Buffer, 0, period_bytes);
-#endif
 			is_1st_sample = false;
 		}
-
-#ifdef CLEAR_1ST_LAST_SAMPLE
-		/* Clear last sample */
-		if (command_val(CMD_STREAM_EXIT|CMD_STREAM_REINIT, stream))
-			memset(Buffer, 0, period_bytes);
-#endif
 
 		pOBuf->PushRelease(period_bytes);
 		pr_debug("<%4d> [CAPT] %s %d %s\n",
@@ -453,6 +442,10 @@ __STATIC__ void *audio_pdm_transfer(void *data)
 #endif
 
 __reinit:
+#ifdef CLEAR_1ST_LAST_SAMPLE
+	bool is_1st_sample = true;
+#endif
+
 	/*
 	 * clear push buffer
 	 */
@@ -533,6 +526,19 @@ __reinit:
 				pOWav[i]->Write(dst, length);
 		}
 #endif
+
+#ifdef CLEAR_1ST_LAST_SAMPLE
+			/* Clear 1st sample */
+			if (is_1st_sample) {
+				memset(OBuffer, 0, period_bytes);
+				is_1st_sample = false;
+			}
+
+			/* Clear last sample */
+			if (command_val(CMD_STREAM_EXIT|CMD_STREAM_REINIT, stream))
+				memset(OBuffer, 0, period_bytes);
+#endif
+
 		pIBuf->PopRelease(PCM_PDM_TR_INP_BYTES);	// Release
 		pOBuf->PushRelease(period_bytes);			// Release
 		pr_debug("<%4d> [PDM ] %s %d %s\n",
@@ -909,7 +915,7 @@ __reinit:
 		if (pPlay) {
 			ret = pPlay->PlayBack((unsigned char*)Buffer, period_bytes);
 			if (0 > ret)
-				MSLEEP(15);
+				MSLEEP(3);
 		}
 
 		pIBuf->PopRelease(period_bytes);

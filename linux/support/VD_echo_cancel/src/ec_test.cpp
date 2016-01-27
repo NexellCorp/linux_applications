@@ -25,62 +25,61 @@ extern "C" {
 #endif
 
 /***************************************************************************************/
-#define CLEAR_1ST_LAST_SAMPLE
 #define SUPPORT_PDM_AGC
+#define SUPPORT_RATE_DETECTOR	/* check SUPPORT_RATE_DETECTOR */
 //#define DEF_PDM_DUMP_RUN
+//#define CLEAR_1ST_LAST_SAMPLE
 
-/* check SUPPORT_RATE_DETECTOR */
-#define SUPPORT_RATE_DETECTOR
 /***************************************************************************************/
 
 /*
-		<< PDM ouput: TH3 >>			<< PDM Transfer: TH4 >>				 		 << PLAY BACK: TH0 >>
-
+			<< PDM : TH4 >>				<< PDM AGC: TH5 >>				 		 		<< AEC : TH1 >>
+                                                                                                                        	 << AEC : TH1 >>		 	  << PLAY UAC: TH0 >>
 			5120 PER 10ms				8192 AGC IN		2048 AGC OUT    		 		1024 AEC BUF0
-		0	-------------			  0 -------------	  0	-------------             0	-------------
-			| L0 / R0	|       		| L0 / R0	|      	| L0 / R0	|         		| L0 / R0	|
-			| L1 / R1	|       		| L1 / R1	|      	| L0 / R0	|               | L0 / R0	|
-			| ......	|       		| L0 / R0	|      	| ....		|               | ....		|
-			| L0 / R0	|       		| L1 / R2	|      	| L0 / R0	|               | L0 / R0	|
-			| L1 / R1	|       		| ....		|  1024 -------------	       1024	-------------
-	5120	-------------       		|			|       | L1 / R1	|
-			| L0 / R0	|       		| L0 / R0	|       | L1 / R1	|		   		1024 AEC BUF1
-			| L1 / R1	| ------------>	| L1 / R2	| --->	| ....		| -------->   0	-------------
-			| ......	| [AGCIN]  8192	-------------       | L1 / R1	| [AGCOUT]    	| L1 / R1	|
-			| L0 / R0	|       		| L0 / R0	|  2048	-------------               | L1 / R1	|
-			| L1 / R1	|       		| L1 / R1	|  		| L0 / R0	|               | ....		|
-	10240	-------------       		| L0 / R0	|       | L0 / R0	|               | L1 / R1	|
-			| L0 / R0	|       		| L1 / R2	|   	| ....		|	       1024	-------------
-			| L1 / R1	|				| ....		|
-			| ......	|
-			| L0 / R0	|
-			| L1 / R1	|
-
-
-	<< I2S0 ouput: TH1  >>															<< PLAY BACK: TH0 >>
-
-			8192 16Khz I2S0 	   		 												1024 AEC REF0
-		0	-------------			     											  0 -------------
-			| L0 / R0	|       														| L0 / R0	|
-			| L0 / R0	| ------------------------------------------------------> 		| L0 / R0	|
-			| ......	| 		  														| ......	|
-			| L0 / R0	|       	   												1024 -------------
-			| L0 / R0	|
-	8192	-------------
-			| L0 / R0	|
-			| L0 / R0	|
-			| ......	|
-			| L0 / R0	|
-			| L0 / R0	|
-	16384	-------------
-			| ......	|
-
-
-	<< I2S1 ouput: TH2  >>															<< PLAY BACK: TH0 >>
-
-			8192 16Khz I2S1 	   		 												1024 AEC REF1
-		0	-------------			     											  0 -------------
-			| L0 / R0	|       														| L0 / R0	|
+		0	-------------			  0 -------------	  0	-------------             0	-------------                    		1024 AEC OUT
+			| L0 / R0	|       		| L0 / R0	|      	| L0 / R0	|         		| L0 / R0	|                         0	-------------             0	-------------
+			| L1 / R1	|       		| L1 / R1	|      	| L0 / R0	|               | L0 / R0	|                     		| L0 / R0	|           	| L0 / R0	|
+			| ......	|       		| L0 / R0	|      	| ....		|               | ....		| ---->	|                   | L0 / R0	|               | L0 / R0	|
+			| L0 / R0	|       		| L1 / R2	|      	| L0 / R0	|               | L0 / R0	|     	|	                | ....		|               | ....		|
+			| L1 / R1	|       		| ....		|  1024 -------------	       1024	-------------     	|              1024	-------------            	| ....		|
+	5120	-------------       		|			|       | L1 / R1	|                                 	|                 	| L0 / R0	|				| ....		|
+			| L0 / R0	|       		| L0 / R0	|       | L1 / R1	|		   		1024 AEC BUF1	  	|					| ....		|           	| ....		|
+			| L1 / R1	| ------------>	| L1 / R2	| --->	| ....		| -------->   0	-------------     	|                 	| ....		|              	| ....		|
+			| ......	| [AGCIN]  8192	-------------       | L1 / R1	| [AGCOUT]    	| L1 / R1	| ---->	| ------------->   	| ....		|  -------->    | ....		|
+			| L0 / R0	|       		| L0 / R0	|  2048	-------------               | L1 / R1	|     	|             		| ....		|           	| ....		|
+			| L1 / R1	|       		| L1 / R1	|  		| L0 / R0	|               | ....		|     	|                   | ....		|               | ....		|
+	10240	-------------       		| L0 / R0	|       | L0 / R0	|               | L1 / R1	|     	|                   | ....		|               | ....		|
+			| L0 / R0	|       		| L1 / R2	|   	| ....		|	       1024	-------------		|				    			                | L0 / R0	|
+			| L1 / R1	|				| ....		|                                                       |              					           4096 -------------
+			| ......	|																					|
+			| L0 / R0	|																					|
+			| L1 / R1	|																					|
+																											|
+																											|
+		<< I2S0 : TH2  >>																<< AEC : TH1 >>		|
+																											|
+			8192 16Khz I2S0 	   		 												1024 AEC REF0		|
+		0	-------------			     											  0 -------------		|
+			| L0 / R0	|       														| L0 / R0	| ---->	|
+			| L0 / R0	| ------------------------------------------------------> 		| L0 / R0	|		|
+			| ......	| 		  														| ......	|		|
+			| L0 / R0	|       	   												1024 -------------		|
+			| L0 / R0	|																					|
+	8192	-------------																					|
+			| L0 / R0	|																					|
+			| L0 / R0	|																					|
+			| ......	|																					|
+			| L0 / R0	|																					|
+			| L0 / R0	|																					|
+	16384	-------------																					|
+			| ......	|																					|
+																											|
+																											|
+		<< I2S1 : TH3  >>																<< AEC : TH1 >>		|
+																											|
+			8192 16Khz I2S1 	   		 												1024 AEC REF1		|
+		0	-------------			     											  0 -------------		|
+			| L0 / R0	|       														| L0 / R0	| ---->	|
 			| L0 / R0	| ------------------------------------------------------> 		| L0 / R0	|
 			| ......	| 		  														| ......	|
 			| L0 / R0	|       	   												1024 -------------
@@ -132,8 +131,8 @@ extern "C" {
 #define	STREAM_PLAYBACK			(0)
 #define	STREAM_CAPTURE_I2S		(1<<1)
 #define	STREAM_CAPTURE_PDM		(1<<2)
-#define	STREAM_TRANS_CAPT		(1<<3)
-#define	STREAM_TRANS_PDM		(1<<4)
+#define	STREAM_TRANS_AEC		(1<<3)
+#define	STREAM_TRANS_AGC		(1<<4)
 
 #define	CMD_STREAM_EXIT			(1<<0)
 #define	CMD_STREAM_REINIT		(1<<1)
@@ -287,7 +286,7 @@ __STATIC__ void *audio_capture(void *data)
 
 __reinit:
 
-	bool is_1st_sample = true;
+	bool b_1st_sample = true;
 	RUN_TIMESTAMP_US(ts);
 
 	/* clear push buffer */
@@ -327,13 +326,13 @@ __reinit:
 		if (0 > ret)
 			continue;
 
-		if (is_1st_sample) {
+		if (b_1st_sample) {
 			END_TIMESTAMP_US(ts, td);
 			struct timeval tv;
 			gettimeofday(&tv, NULL);
 			printf("[%6ld.%06ld s] <%4d> [CAPT] capt [%4d][%3lld.%03lld ms] %s\n",
 				tv.tv_sec, tv.tv_usec, tid, period_bytes, td/1000, td%1000, stream->pcm_name);
-			is_1st_sample = false;
+			b_1st_sample = false;
 		}
 
 		pOBuf->PushRelease(period_bytes);
@@ -390,7 +389,7 @@ __STATIC__ inline void split_pdm_data(int *s, int *d0, int *d1, int size)
 	assert(0 == (((long)d1 - (long)D1) - size/2));
 }
 
-__STATIC__ void *audio_pdm_transfer(void *data)
+__STATIC__ void *audio_pdm_agc(void *data)
 {
 	struct audio_stream *stream = (struct audio_stream *)data;;
 	CQBuffer *pOBuf = (CQBuffer *)stream->qbuf;
@@ -444,7 +443,7 @@ __STATIC__ void *audio_pdm_transfer(void *data)
 
 __reinit:
 #ifdef CLEAR_1ST_LAST_SAMPLE
-	bool is_1st_sample = true;
+	bool b_1st_sample = true;
 #endif
 
 	/*
@@ -519,10 +518,10 @@ __reinit:
 		int length = period_bytes/2;
 		split_pdm_data((int*)OBuffer, tmp_PDM[0], tmp_PDM[1], period_bytes);
 
+		// Realignment PDM OUT [L0/R0/L1/R1] -> [L0/R0 ..... L1/R1 ....]
 		for (int i = 0; 2 > i ; i++) {
 			unsigned char *dst = OBuffer+(i*(length));
 			memcpy(dst, tmp_PDM[i], length);
-
 			if (b_FileSave)
 				pOWav[i]->Write(dst, length);
 		}
@@ -530,9 +529,9 @@ __reinit:
 
 #ifdef CLEAR_1ST_LAST_SAMPLE
 			/* Clear 1st sample */
-			if (is_1st_sample) {
+			if (b_1st_sample) {
 				memset(OBuffer, 0, period_bytes);
-				is_1st_sample = false;
+				b_1st_sample = false;
 			}
 
 			/* Clear last sample */
@@ -582,7 +581,7 @@ __STATIC__ void audio_clean_capture(void *arg)
 	printf("<%4d> clean PLAY: done\n", gettid());
 }
 
-__STATIC__ void *audio_capture_aec(void *data)
+__STATIC__ void *audio_aec_out(void *data)
 {
 	struct audio_stream *stream = (struct audio_stream *)data;
 	struct list_entry *list, *Head = &stream->in_stream;
@@ -601,7 +600,7 @@ __STATIC__ void *audio_capture_aec(void *data)
 	int sample_bits = stream->sample_bits;
 	int period_bytes = stream->period_bytes;
 
-	int qbuffers = 0, f_no = 0, i = 0;
+	int QBuffers = 0, f_no = 0, i = 0;
 	int WAIT_TIME = 1;
 
 #ifdef SUPPORT_AEC_PCMOUT
@@ -643,14 +642,14 @@ __STATIC__ void *audio_capture_aec(void *data)
 		struct audio_stream *ps = (struct audio_stream *)list->data;;
 		if (NULL == ps)
 			continue;
-		if (ps->qbuf)  pIBuf[qbuffers++] = (CQBuffer *)ps->qbuf;
+		if (ps->qbuf)  pIBuf[QBuffers++] = (CQBuffer *)ps->qbuf;
 	}
 
 	printf("<%4d> CTRN: %s, card:%d.%d %d hz period bytes[%4d] WAIT %dms\n",
 		tid, pcm, card, device, sample_rate, period_bytes, WAIT_TIME);
 	printf("<%4d> CTRN: AEC [%s] !!!\n",
 		tid, command_val(CMD_AEC_PROCESS, stream) ? "RUN":"STOP");
-	for (i = 0; qbuffers > i; i++)
+	for (i = 0; QBuffers > i; i++)
 		printf("<%4d> CTRN: IN [%d][%p] %s -> [%p] %s\n",
 			tid, i, pIBuf[i], pIBuf[i]->GetBufferName(), pOBuf, pOBuf->GetBufferName());
 
@@ -659,7 +658,7 @@ __reinit:
 	pOBuf->ClearBuffer();
 
 	/* wait cleard push buufer */
-	for (i = 0, n = 0; qbuffers > i; i++)
+	for (i = 0, n = 0; QBuffers > i; i++)
 		pIBuf[i]->WaitForClear();
 
 	command_clr(CMD_STREAM_REINIT, stream);
@@ -689,11 +688,11 @@ __reinit:
 			command_clr(CMD_CAPT_STOP, stream);
 		}
 
-		for (i = 0, n = 0; qbuffers > i; i++) {
+		for (i = 0, n = 0; QBuffers > i; i++) {
 			unsigned int type = pIBuf[i]->GetBufferType();
 
 			switch (type) {
-			case STREAM_TRANS_PDM :
+			case STREAM_TRANS_AGC :
 				/* Wait PDM buffer */
 				do {
 					IBuffer[i] = pIBuf[i]->PopBuffer(buf_out_bytes,  WAIT_TIME);
@@ -735,6 +734,9 @@ __reinit:
 		if (command_val(CMD_STREAM_REINIT, stream))
 			goto __reinit;
 
+		if (command_val(CMD_STREAM_EXIT, stream))
+			goto __exit;
+
 		/*
 		 * save to file MIXED PDM0/1 & I2S0/1
 		 */
@@ -742,8 +744,8 @@ __reinit:
 	#if 1
 			short *d  = (short *)ISYNC;
 			short *s0 = (short *)In_Buf[0];	// INP: PDM0
-			short *s1 = (short *)In_Ref[0];	// INP: PDM
-			short *s2 = (short *)In_Buf[1];	// REF: I2S0
+			short *s1 = (short *)In_Ref[0];	// INP: I2S0
+			short *s2 = (short *)In_Buf[1];	// REF: PDM1
 			short *s3 = (short *)In_Ref[1];	// REF: I2S1
 
 			s1++, s3++;	/* for I2S Right */
@@ -790,12 +792,12 @@ __reinit:
 #endif
 		}
 
-		/* release buffers */
-		for (i = 0; qbuffers > i; i++) {
+		/* Release InBuffers */
+		for (i = 0; QBuffers > i; i++) {
 			if (IBuffer[i]) {
 				unsigned int type = pIBuf[i]->GetBufferType();
 				switch (type) {
-					case STREAM_TRANS_PDM  : pIBuf[i]->PopRelease(buf_out_bytes); break;
+					case STREAM_TRANS_AGC  : pIBuf[i]->PopRelease(buf_out_bytes); break;
 					case STREAM_CAPTURE_I2S: pIBuf[i]->PopRelease(aec_buf_bytes); break;
 					default:	break;
 				}
@@ -804,11 +806,9 @@ __reinit:
 			}
 		}
 
-#if 1
 		/* Copy to playback */
 		OBuffer = pOBuf->PushBuffer(aec_buf_bytes, 1);
 		if (OBuffer) {
-			/* copy AEC out */
 			int *src;
 			switch(stream->value) {
 				case  0:	src = (int*)Out_PCM  ; break;
@@ -823,7 +823,6 @@ __reinit:
 			memcpy(OBuffer, src, aec_buf_bytes);
 			pOBuf->PushRelease(aec_buf_bytes);
 		}
-#endif
 
 #ifdef SUPPORT_AEC_PCMOUT
 		if (t_min > td)
@@ -842,6 +841,7 @@ __reinit:
 	if (command_val(CMD_STREAM_REINIT, stream))
 		goto __reinit;
 
+__exit:
 	printf("<%4d> EXIT : %s\n", tid, stream->pcm_name);
 	pSIWav->Close();
 	pECWav->Close();
@@ -965,15 +965,15 @@ __STATIC__ void audio_init_stream(struct audio_stream *stream, int card, int dev
 		pr_debug("INIT PLAY: %s\n", pcm_name);
 		break;
 
-	case STREAM_TRANS_CAPT:
-		stream->func = audio_capture_aec;
+	case STREAM_TRANS_AEC:
+		stream->func = audio_aec_out;
 		stream->qbuf = new CQBuffer(persios, stream->period_bytes, pcm_name, type);
 		pr_debug("INIT CTRN: %s, Q[%p] [%d:%d]\n",
 			pcm_name, stream->qbuf, stream->period_bytes, periods);
 		break;
 
-	case STREAM_TRANS_PDM:
-		stream->func = audio_pdm_transfer;
+	case STREAM_TRANS_AGC:
+		stream->func = audio_pdm_agc;
 		stream->qbuf = new CQBuffer(persios, stream->period_bytes, pcm_name, type);
 		pr_debug("INIT PTRN: %s, Q[%p] [%d:%d]\n",
 			pcm_name, stream->qbuf, stream->period_bytes, periods);
@@ -1012,6 +1012,36 @@ __STATIC__ void audio_stream_release(struct audio_stream *stream)
 }
 
 #ifdef SUPPORT_RATE_DETECTOR
+__STATIC__ void audio_event_parse(const char *msg, struct udev_message *udev)
+{
+	const char *index = NULL;
+
+    udev->sample_frame = "";
+    udev->sample_rate = 0;
+
+	/* currently ignoring SEQNUM */
+    while(*msg) {
+
+		index = "SAMPLERATE_CHANGED=";
+        if(!strncmp(msg, index, strlen(index))) {
+            msg += strlen(index);
+            udev->sample_rate = strtoll(msg, NULL, 10);
+            pr_debug("[%s] %d\n", index, udev->sample_rate);
+        }
+
+		index = "SAMPLE_NO_DATA=";
+        if(!strncmp(msg, index, strlen(index))) {
+            msg += strlen(index);
+            udev->sample_frame = msg;
+            pr_debug("[%s] %s\n", index, udev->sample_frame);
+        }
+
+        /* advance to after the next \0 */
+        while(*msg++)
+            ;
+    }
+}
+
 __STATIC__ void *audio_rate_detector(void *data)
 {
 	struct audio_stream *streams = (struct audio_stream *)data;
@@ -1035,22 +1065,23 @@ __STATIC__ void *audio_rate_detector(void *data)
 		if (!ev_sz)
 			continue;
 
-		bool b_mod_rate = false;
-		bool b_no_data = false;
-		audio_uevent_parse(buffer, &udev);
+		bool b_changed_rate = false;
+		bool b_no_LRCK = false;
+
+		audio_event_parse(buffer, &udev);
 		gettimeofday(&tv, NULL);
 
 		if (udev.sample_rate &&
 			udev.sample_rate != __i2s_sample_rate) {
 			printf("***** (%6ld.%06ld s) Changed Rate [%dhz -> %dhz]*****\n",
 					tv.tv_sec, tv.tv_usec, __i2s_sample_rate, udev.sample_rate);
-			b_mod_rate = true;
+			b_changed_rate = true;
 			__i2s_sample_rate = udev.sample_rate;
 		}
 
 		if (udev.sample_frame && !strcmp(udev.sample_frame, "YES")) {
 			printf("***** (%6ld.%06ld s) Sample NO LRCLK *****\n", tv.tv_sec, tv.tv_usec);
-			b_no_data = true;
+			b_no_LRCK = true;
 			__i2s_sample_rate = PCM_I2S_START_RATE;
 		}
 
@@ -1058,10 +1089,10 @@ __STATIC__ void *audio_rate_detector(void *data)
 			if (!streams[i].is_valid)
 				continue;
 
-			if (b_mod_rate)
+			if (b_changed_rate)
 				command_set(CMD_STREAM_REINIT, &streams[i]);
 
-			if (b_no_data)
+			if (b_no_LRCK)
 				command_set(CMD_STREAM_NODATA, &streams[i]);
 		}
 	}
@@ -1150,8 +1181,8 @@ __STATIC__ void print_cmd_usage(void)
     printf("'q'	  : Quiet \n");
     printf("'s'	  : start catpture \n");
     printf("'t'	  : stop  catpture \n");
-    printf("'n'	  : init  devices \n");
-    printf("'num' : output channel (0:AEC, 1:PDM0, 2:PDM1, 3:I2S0, 4:I2S1) \n");
+    printf("'n'	  : init  devices (for test)\n");
+    printf("'num' : uac out channel (0:AEC, 1:PDM0, 2:PDM1, 3:I2S0, 4:I2S1) \n");
 }
 
 #define	cmd_compare(s, c)	(0 == strncmp(s, c, strlen(c)-1))
@@ -1184,12 +1215,12 @@ int main(int argc, char **argv)
 
     while (-1 != (opt = getopt(argc, argv, "hefiprwc:"))) {
 		switch(opt) {
-        case 'e':   o_aec_proc = false;			break;
-        case 'f':   o_raw_form = true;			break;
-        case 'i':   o_inargument = false;		break;
-       	case 'w':   o_filewrite = true;			break;
-       	case 'p':   o_pdm_agc = false;			break;
-       	case 'r':   o_pdm_raw = true;			break;
+        case 'e':   o_aec_proc = false;		break;
+        case 'f':   o_raw_form = true;		break;
+        case 'i':   o_inargument = false;	break;
+       	case 'w':   o_filewrite = true;		break;
+       	case 'p':   o_pdm_agc = false;		break;
+       	case 'r':   o_pdm_raw = true;		break;
        	case 'c':   o_capt_path = true;
        				strcpy(path, optarg);
        				break;
@@ -1219,33 +1250,19 @@ int main(int argc, char **argv)
 	// I2SRT5631 : SVT
 	// I2SES8316 : DRONE
 	/* capture: cat /proc/asound/cards */
-#if 1
-	audio_init_stream(&streams[0],  0,  0, "default:CARD=UAC2Gadget"	, STREAM_PLAYBACK   , CH_2, 16000, SAMPLE_BITS_16, PCM_UAC_PERIOD_BYTES, PCM_UAC_PERIOD_SIZE);
-	audio_init_stream(&streams[1], -1, -1, "CAPT Transfer"				, STREAM_TRANS_CAPT , CH_2, 16000, SAMPLE_BITS_16, PCM_AEC_PERIOD_BYTES, PCM_AEC_PERIOD_SIZE);
+	audio_init_stream(&streams[0],  0,  0, "default:CARD=UAC2Gadget"	, STREAM_PLAYBACK   , CH_2, 16000, SAMPLE_BITS_16, PCM_UAC_PERIOD_BYTES, PCM_UAC_PERIOD_SIZE);	// UAC
+	audio_init_stream(&streams[1], -1, -1, "CAPT Transfer"				, STREAM_TRANS_AEC  , CH_2, 16000, SAMPLE_BITS_16, PCM_AEC_PERIOD_BYTES, PCM_AEC_PERIOD_SIZE);
 	audio_init_stream(&streams[2],  1,  0, "default:CARD=SNDNULL0"   	, STREAM_CAPTURE_I2S, CH_2, 16000, SAMPLE_BITS_16, PCM_I2S_PERIOD_BYTES, PCM_I2S_PERIOD_SIZE);	// I2S1
 	audio_init_stream(&streams[3],  2,  0, "default:CARD=SNDNULL1"   	, STREAM_CAPTURE_I2S, CH_2, 16000, SAMPLE_BITS_16, PCM_I2S_PERIOD_BYTES, PCM_I2S_PERIOD_SIZE);	// I2S0
 	audio_init_stream(&streams[4],  3,  0, "default:CARD=PDMRecorder"	, STREAM_CAPTURE_PDM, CH_4, 64000, SAMPLE_BITS_16, PCM_PDM_PERIOD_BYTES, PCM_PDM_PERIOD_SIZE);	// PDM
-	audio_init_stream(&streams[5], -1, -1, "PDM Transfer"				, STREAM_TRANS_PDM	, CH_4, 16000, SAMPLE_BITS_16, PCM_PDM_TR_OUT_BYTES, PCM_PDM_TR_OUT_SIZE);	// PDM
-#else
-	audio_init_stream(&streams[0],  0,  0, NULL						    , STREAM_PLAYBACK   , CH_2, 16000, SAMPLE_BITS_16, PCM_AEC_PERIOD_BYTES, PCM_AEC_PERIOD_SIZE);
-	audio_init_stream(&streams[1],  1,  0, "default:CARD=SNDNULL0"   	, STREAM_CAPTURE_I2S, CH_2, 16000, SAMPLE_BITS_16, PCM_I2S_PERIOD_BYTES, PCM_I2S_PERIOD_SIZE);	// I2S1
-	audio_init_stream(&streams[2],  2,  0, "default:CARD=SNDNULL1"   	, STREAM_CAPTURE_I2S, CH_2, 16000, SAMPLE_BITS_16, PCM_I2S_PERIOD_BYTES, PCM_I2S_PERIOD_SIZE);	// I2S0
-	audio_init_stream(&streams[3],  3,  0, "default:CARD=PDMRecorder"	, STREAM_CAPTURE_PDM, CH_4, 64000, SAMPLE_BITS_16, PCM_PDM_PERIOD_BYTES, PCM_PDM_PERIOD_SIZE);	// PDM
-	audio_init_stream(&streams[4],  4,  0, "PDM Transfer"				, STREAM_TRANS_PDM	, CH_4, 16000, SAMPLE_BITS_16, PCM_PDM_TR_OUT_BYTES, PCM_PDM_TR_OUT_SIZE);	// PDM
-#endif
+	audio_init_stream(&streams[5], -1, -1, "PDM Transfer"				, STREAM_TRANS_AGC  , CH_4, 16000, SAMPLE_BITS_16, PCM_PDM_TR_OUT_BYTES, PCM_PDM_TR_OUT_SIZE);	// PDM
 
-	// CAPT AEC -> playback
-	list_add(&streams[1].stream, &streams[0].in_stream);
-
-	// I2S -> CAPT AEC
-	list_add(&streams[2].stream, &streams[1].in_stream);
-
-	// I2S -> CAPT AEC
-	list_add(&streams[3].stream, &streams[1].in_stream);
-
-	// PDM -> PDM trans -> CAPT AEC
-	list_add(&streams[4].stream, &streams[5].in_stream);
-	list_add(&streams[5].stream, &streams[1].in_stream);
+	/* Link buffers */
+	list_add(&streams[1].stream, &streams[0].in_stream);	// CAPT AEC -> playback
+	list_add(&streams[2].stream, &streams[1].in_stream);	// I2S -> CAPT AEC
+	list_add(&streams[3].stream, &streams[1].in_stream);	// I2S -> CAPT AEC
+	list_add(&streams[4].stream, &streams[5].in_stream);	// PDM -> PDM trans -> CAPT AEC
+	list_add(&streams[5].stream, &streams[1].in_stream);	// PDM -> PDM trans -> CAPT AEC
 
 	pthread_attr_init(&attr);
    	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);

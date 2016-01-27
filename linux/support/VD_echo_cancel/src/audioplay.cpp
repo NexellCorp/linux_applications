@@ -111,8 +111,7 @@ int CAudioPlayer::Capture(unsigned char *buffer, int bytes)
 
 	int ret = pcm_read(m_hPCM, buffer, bytes);
 	if (ret) {
-		printf("E:%s, %s %s\n", m_Stream == PCM_OUT ? "Playing":"Capturing",
-			m_pcmName, pcm_get_error(m_hPCM));
+		printf("E: Capturing, %s %s\n", m_pcmName, pcm_get_error(m_hPCM));
     	return -1;
     }
     return bytes;
@@ -124,8 +123,12 @@ int CAudioPlayer::PlayBack(unsigned char *buffer, int bytes)
 		return 0;
 
 	int ret = pcm_write(m_hPCM, buffer, bytes);
-	if (ret)
+	if (ret) {
+	#if 0
+		printf("E: Playing, %s %s\n", m_pcmName, pcm_get_error(m_hPCM));
+	#endif
     	return -1;
+    }
 	return bytes;
 }
 

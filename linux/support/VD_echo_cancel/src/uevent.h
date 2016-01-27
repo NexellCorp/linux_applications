@@ -21,8 +21,6 @@ struct udev_message {
     int sample_rate;
 };
 
-#define AUDIO_UEVENT_MESSAGE	"SAMPLERATE_CHANGED"
-
 __STATIC__ int audio_uevent_init(void)
 {
     struct sockaddr_nl addr;
@@ -71,36 +69,6 @@ __STATIC__ int audio_uevent_event(int fd, char* buffer, int length)
 
 	// won't get here
     return 0;
-}
-
-__STATIC__ void audio_uevent_parse(const char *msg, struct udev_message *udev)
-{
-	const char *index = NULL;
-
-    udev->sample_frame = "";
-    udev->sample_rate = 0;
-
-	/* currently ignoring SEQNUM */
-    while(*msg) {
-
-		index = "SAMPLERATE_CHANGED=";
-        if(!strncmp(msg, index, strlen(index))) {
-            msg += strlen(index);
-            udev->sample_rate = strtoll(msg, NULL, 10);
-            pr_debug("[%s] %d\n", index, udev->sample_rate);
-        }
-
-		index = "SAMPLE_NO_DATA=";
-        if(!strncmp(msg, index, strlen(index))) {
-            msg += strlen(index);
-            udev->sample_frame = msg;
-            pr_debug("[%s] %s\n", index, udev->sample_frame);
-        }
-
-        /* advance to after the next \0 */
-        while(*msg++)
-            ;
-    }
 }
 #endif
 #endif /* U_EVENT_H */

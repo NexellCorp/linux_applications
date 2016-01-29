@@ -328,10 +328,10 @@ __reinit:
 
 		if (b_1st_sample) {
 			END_TIMESTAMP_US(ts, td);
-			struct timeval tv;
-			gettimeofday(&tv, NULL);
-			printf("[%6ld.%06ld s] <%4d> [CAPT] capt [%4d][%3lld.%03lld ms] %s\n",
-				tv.tv_sec, tv.tv_usec, tid, period_bytes, td/1000, td%1000, stream->pcm_name);
+//			struct timeval tv;
+//			gettimeofday(&tv, NULL);
+//			printf("[%6ld.%06ld s] <%4d> [CAPT] capt [%4d][%3lld.%03lld ms] %s\n",
+//				tv.tv_sec, tv.tv_usec, tid, period_bytes, td/1000, td%1000, stream->pcm_name);
 			b_1st_sample = false;
 		}
 
@@ -888,8 +888,6 @@ __STATIC__ void *audio_playback(void *data)
 
 	printf("<%4d> PLAY: %s, card:%d.%d %d hz period bytes[%4d]\n",
 		tid, pcm, card, device, sample_rate, period_bytes);
-	printf("<%4d> PLAY: AEC [%s] !!!\n",
-		tid, command_val(CMD_AEC_PROCESS, stream) ? "RUN":"STOP");
 
 	if (pcm) {
 		pPlay = new CAudioPlayer(AUDIO_STREAM_PLAYBACK);

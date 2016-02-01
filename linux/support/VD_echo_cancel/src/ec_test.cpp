@@ -28,7 +28,7 @@ extern "C" {
 #define SUPPORT_PDM_AGC
 #define SUPPORT_RATE_DETECTOR	/* check SUPPORT_RATE_DETECTOR */
 //#define DEF_PDM_DUMP_RUN
-//#define CLEAR_1ST_LAST_SAMPLE
+//#define CLEAR_PDMAGC_OUT_SAMPLES
 
 /***************************************************************************************/
 
@@ -328,10 +328,14 @@ __reinit:
 
 		if (b_1st_sample) {
 			END_TIMESTAMP_US(ts, td);
+
 //			struct timeval tv;
 //			gettimeofday(&tv, NULL);
 //			printf("[%6ld.%06ld s] <%4d> [CAPT] capt [%4d][%3lld.%03lld ms] %s\n",
 //				tv.tv_sec, tv.tv_usec, tid, period_bytes, td/1000, td%1000, stream->pcm_name);
+//			if (stream->type == STREAM_CAPTURE_PDM)
+//				memset(Buffer, 0, period_bytes);
+
 			b_1st_sample = false;
 		}
 
@@ -442,7 +446,7 @@ __STATIC__ void *audio_pdm_agc(void *data)
 #endif
 
 __reinit:
-#ifdef CLEAR_1ST_LAST_SAMPLE
+#ifdef CLEAR_PDMAGC_OUT_SAMPLES
 	bool b_1st_sample = true;
 #endif
 
@@ -527,7 +531,7 @@ __reinit:
 		}
 #endif
 
-#ifdef CLEAR_1ST_LAST_SAMPLE
+#ifdef CLEAR_PDMAGC_OUT_SAMPLES
 			/* Clear 1st sample */
 			if (b_1st_sample) {
 				memset(OBuffer, 0, period_bytes);
@@ -620,13 +624,14 @@ __STATIC__ void *audio_aec_out(void *data)
 	stream->WavFile[0] =  pECWav;
 	stream->WavFile[1] =  pSIWav;
 	stream->wav_files  =  2;
+	int port = 4;
 
 #ifdef SUPPORT_AEC_PCMOUT
 	int *Out_PCM_aec1 = new int[256], *Out_PCM_aec2 = new int[256];
 	int *Out_PCM = new int[256];
 #endif
 	int *Dummy = new int[256];	// L/R : 256 Frame
-	int  ISYNC[512];
+	int  ISYNC[1024];
 	int n = 0;
 
 	int *In_Buf[2] = { Dummy, Dummy };	// PDM : L1/R1, L1/R1, L1/R1, ...
@@ -674,7 +679,7 @@ __reinit:
 
 		if (command_val(CMD_CAPT_RUN, stream)) {
 			bool bWAV = command_val(CMD_CAPT_RAWFORM, stream) ? false : true;
-			pSIWav->Open(bWAV, channels*2, sample_rate, sample_bits, "%s/capt%d.wav", path, f_no);
+			pSIWav->Open(bWAV, channels*port, sample_rate, sample_bits, "%s/capt%d.wav", path, f_no);
 			pECWav->Open(bWAV, channels  , sample_rate, sample_bits, "%s/outp%d.wav", path, f_no);
 			f_no++;	/* next file */
 			b_FileSave = true;
@@ -742,32 +747,21 @@ __reinit:
 		 */
 		if (b_FileSave) {
 	#if 1
-			short *d  = (short *)ISYNC;
-			short *s0 = (short *)In_Buf[0];	// INP: PDM0
-			short *s1 = (short *)In_Ref[0];	// INP: I2S0
-			short *s2 = (short *)In_Buf[1];	// REF: PDM1
-			short *s3 = (short *)In_Ref[1];	// REF: I2S1
-
-			s1++, s3++;	/* for I2S Right */
-
-			for (i = 0; aec_buf_bytes > i; i += 4) {
-				*d++ = *s0++, s0++;
-				*d++ = *s1++, s1++;
-				*d++ = *s2++, s2++;
-				*d++ = *s3++, s3++;
-			}
-	#else
 			int *d  = (int *)ISYNC;
-			int *s0 = (int *)In_Ref[0];	// I2S0
-			int *s1 = (int *)In_Ref[1];	// I2S1
+			int *s0 = (int *)In_Buf[0];	// INP: PDM0
+			int *s1 = (int *)In_Buf[1];	// INP: PDM1
+			int *s2 = (int *)In_Ref[0];	// REF: I2S0
+			int *s3 = (int *)In_Ref[1];	// REF: I2S1
 
 			for (i = 0; aec_buf_bytes > i; i += 4) {
 				*d++ = *s0++;
 				*d++ = *s1++;
+				*d++ = *s2++;
+				*d++ = *s3++;
 			}
 	#endif
 			assert(0 == ((long)d - (long)ISYNC) - sizeof(ISYNC));
-			pSIWav->Write((void*)ISYNC, aec_buf_bytes*2);
+			pSIWav->Write((void*)ISYNC, aec_buf_bytes*port);
 		}
 
 		/*
@@ -1206,7 +1200,7 @@ int main(int argc, char **argv)
 	bool o_capt_path = false;
 	bool o_raw_form = false;
 	bool o_filewrite = false;
-	bool o_pdm_agc = true;
+//	bool o_pdm_agc = true;
 	bool o_pdm_raw = false;
 
 	memset(streams, 0x0, sizeof(streams));
@@ -1217,7 +1211,7 @@ int main(int argc, char **argv)
         case 'f':   o_raw_form = true;		break;
         case 'i':   o_inargument = false;	break;
        	case 'w':   o_filewrite = true;		break;
-       	case 'p':   o_pdm_agc = false;		break;
+//     	case 'p':   o_pdm_agc = false;		break;
        	case 'r':   o_pdm_raw = true;		break;
        	case 'c':   o_capt_path = true;
        				strcpy(path, optarg);
@@ -1283,7 +1277,7 @@ int main(int argc, char **argv)
 			command_clr(CMD_CAPT_STOP, stream);
 		}
 
-		if (o_pdm_agc ) command_set(CMD_CAPT_PDMAGC , stream);
+//		if (o_pdm_agc ) command_set(CMD_CAPT_PDMAGC , stream);
 		if (o_pdm_raw ) command_set(CMD_CAPT_PDMRAW , stream);
 		if (o_raw_form) command_set(CMD_CAPT_RAWFORM, stream);
 		if (o_aec_proc) command_set(CMD_AEC_PROCESS , stream);

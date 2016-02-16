@@ -1,0 +1,66 @@
+1. download source 
+
+		#> repo init -u ssh://jhkim@git.nexell.co.kr:29418/nexell/linux/manifest -b linux-vd-ec
+		#> repo sync
+
+
+2. Goto VD_EC project path
+
+		#> cd applications/linux/support/VD_echo_cancel
+	
+		- <TOP> = <PATH>/applications/linux/support/VD_echo_cancel
+
+
+3. Toolchain install (for VD-EC application hard float point)
+
+		#> cd <TOP>/tools
+		#> cp gcc-linaro-4.9-2014.11-x86_64_arm-linux-gnueabihf.tar.xz /opt/crosstools/
+		#> tar xvf gcc-linaro-4.9-2014.11-x86_64_arm-linux-gnueabihf.tar.xz
+		#> export PATH=$PATH:/opt/crosstools/gcc-linaro-4.9-2014.11-x86_64_arm-linux-gnueabihf/bin
+
+
+4. Decompress rootfs
+
+		#> cd <TOP>/rootfs
+		#> tar zxvf rootfs-armhf.tar.gz
+
+
+5. Build and copy applications (depend on 3. Toolchain install)	
+		
+		#> cd <PATH>/applications/linux/support/VD_echo_cancel/src
+		#> make
+		- maked "ec_test"
+
+		#> cp ec_test ../rootfs/rootfs-armhf/root
+
+		
+		[push/pull]
+
+		#> git pull origin master 
+		#> git push origin HEAD:master 
+
+
+6. Linux kernel : (depend on 3. Toolchain install and 4. Decompress rootfs)	
+
+	A. Build (kernel Image + rootfs)	
+		#> cp s5p4418.ec.config .config
+		#> make ARCH=arm menuconfig
+		#> make ARCH=arm uImage 
+
+	B. push/pull
+		#> git pull nexell_linux linux-vd-ec
+		#> git push nexell_linux HEAD:linux-vd-ec
+
+
+7. Linux u-boot : 
+
+	A. Build	
+		#> make 5p4418_ec_config
+		#> make  
+
+	B. push/pull
+		#> git pull nexell_linux linux-vd-ec
+		#> git push nexell_linux HEAD:linux-vd-ec
+
+
+

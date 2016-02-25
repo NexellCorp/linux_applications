@@ -1200,7 +1200,7 @@ int main(int argc, char **argv)
 	bool o_capt_path = false;
 	bool o_raw_form = false;
 	bool o_filewrite = false;
-//	bool o_pdm_agc = true;
+	bool o_pdm_agc = true;
 	bool o_pdm_raw = false;
 
 	memset(streams, 0x0, sizeof(streams));
@@ -1211,7 +1211,7 @@ int main(int argc, char **argv)
         case 'f':   o_raw_form = true;		break;
         case 'i':   o_inargument = false;	break;
        	case 'w':   o_filewrite = true;		break;
-//     	case 'p':   o_pdm_agc = false;		break;
+     	case 'p':   o_pdm_agc = false;		break;
        	case 'r':   o_pdm_raw = true;		break;
        	case 'c':   o_capt_path = true;
        				strcpy(path, optarg);
@@ -1277,7 +1277,7 @@ int main(int argc, char **argv)
 			command_clr(CMD_CAPT_STOP, stream);
 		}
 
-//		if (o_pdm_agc ) command_set(CMD_CAPT_PDMAGC , stream);
+		if (o_pdm_agc ) command_set(CMD_CAPT_PDMAGC , stream);
 		if (o_pdm_raw ) command_set(CMD_CAPT_PDMRAW , stream);
 		if (o_raw_form) command_set(CMD_CAPT_RAWFORM, stream);
 		if (o_aec_proc) command_set(CMD_AEC_PROCESS , stream);

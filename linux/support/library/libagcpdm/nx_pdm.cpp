@@ -6,6 +6,7 @@ void pdm_Init (
 	pdm_STATDEF 	*pdm_st
 	)
 {
+	printf("[AGC_PDM: %s:%s]\n", __DATE__, __TIME__);
 	agc_Init(&pdm_st->agc_st[0]);
 	agc_Init(&pdm_st->agc_st[1]);
 	agc_Init(&pdm_st->agc_st[2]);

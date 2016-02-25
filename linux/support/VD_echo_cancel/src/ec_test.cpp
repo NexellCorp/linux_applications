@@ -433,7 +433,7 @@ __STATIC__ void *audio_pdm_agc(void *data)
 
 #ifdef SUPPORT_PDM_AGC
 	pdm_STATDEF	pdm_st;
-	int agc_dB = -24;
+	int agc_dB = -10;
 	pdm_Init(&pdm_st);
 #endif
 

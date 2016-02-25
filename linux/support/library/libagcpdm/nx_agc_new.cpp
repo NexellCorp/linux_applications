@@ -10,7 +10,7 @@
 int 	LPFBuf[1024] = { 0, };
 
 int 				agc_st_frames		;
-long int 			agc_st_sum 		;
+long long 			agc_st_sum 		;
 int 				agc_st_iGain 		;
 int 				agc_st_IntpGain	;
 int 				agc_st_max1, agc_st_max2, agc_st_max3, agc_st_max4;

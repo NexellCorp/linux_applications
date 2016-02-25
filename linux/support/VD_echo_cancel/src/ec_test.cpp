@@ -462,15 +462,18 @@ __reinit:
 
 	while (!command_val((CMD_STREAM_EXIT|CMD_STREAM_REINIT), stream)) {
 
-		if (command_val(CMD_CAPT_PDMAGC, stream) &&
+		if ((command_val(CMD_CAPT_PDMAGC, stream) ||
+			 command_val(CMD_CAPT_PDMRAW, stream)) &&
 			command_val(CMD_CAPT_RUN, stream)) {
 			bool bWAV = command_val(CMD_CAPT_RAWFORM, stream) ? false : true;
 
 			if (command_val(CMD_CAPT_PDMRAW, stream))
 				pIWav->Open(bWAV, channels, sample_rate, sample_bits, "%s/%s", path, "pdm_i.wav");
 
-			pOWav[0]->Open(bWAV, channels/2, sample_rate, sample_bits, "%s/pdm_o_%d.wav", path, 0);
-			pOWav[1]->Open(bWAV, channels/2, sample_rate, sample_bits, "%s/pdm_o_%d.wav", path, 1);
+			if (command_val(CMD_CAPT_PDMAGC, stream)) {
+				pOWav[0]->Open(bWAV, channels/2, sample_rate, sample_bits, "%s/pdm_o_%d.wav", path, 0);
+				pOWav[1]->Open(bWAV, channels/2, sample_rate, sample_bits, "%s/pdm_o_%d.wav", path, 1);
+			}
 
 			b_FileSave = true;
 			command_clr((CMD_CAPT_RUN), stream);
@@ -480,8 +483,10 @@ __reinit:
 			if (command_val(CMD_CAPT_PDMRAW, stream))
 				pIWav->Close();
 
-			pOWav[0]->Close();
-			pOWav[1]->Close();;
+			if (command_val(CMD_CAPT_PDMAGC, stream)) {
+				pOWav[0]->Close();
+				pOWav[1]->Close();;
+			}
 
 			command_clr((CMD_CAPT_STOP), stream);
 			b_FileSave = false;

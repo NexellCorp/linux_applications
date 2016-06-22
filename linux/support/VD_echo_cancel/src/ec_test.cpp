@@ -9,7 +9,8 @@
 #include "audioplay.h"
 #include "qbuff.h"
 #include "wav.h"
-//#define SUPPORT_RT_SCHEDULE
+
+/* #define SUPPORT_RT_SCHEDULE */
 #include "util.h"
 #include "../lib/nx_pdm.h"
 
@@ -17,7 +18,6 @@ extern "C" {
 #include "../lib/libPreproc1.h"
 }
 
-//#define	DEBUG
 #ifdef  DEBUG
 #define	pr_debug(m...)	printf(m)
 #else
@@ -26,9 +26,10 @@ extern "C" {
 
 /***************************************************************************************/
 #define SUPPORT_PDM_AGC
-#define SUPPORT_RATE_DETECTOR	/* check SUPPORT_RATE_DETECTOR */
-//#define DEF_PDM_DUMP_RUN
-//#define CLEAR_PDMAGC_OUT_SAMPLES
+#define SUPPORT_RATE_DETECTOR
+
+/* #define DEF_PDM_DUMP_RUN */
+/* #define CLEAR_PDMAGC_OUT_SAMPLES */
 
 /***************************************************************************************/
 
@@ -97,21 +98,21 @@ extern "C" {
 */
 
 /* config buffer type */
-#define	PCM_AEC_PERIOD_BYTES	1024		// PDM (256*L/R) * 2 = 2048
+#define	PCM_AEC_PERIOD_BYTES	1024		/* PDM (256*L/R) * 2 = 2048 */
 #define	PCM_AEC_PERIOD_SIZE		64
 
-#define	PCM_PDM_PERIOD_BYTES	(4*160*8)	// FIX: For PDM HW
+#define	PCM_PDM_PERIOD_BYTES	(4*160*8)	/* FIX: For PDM HW */
 #define	PCM_PDM_PERIOD_SIZE		64
 
 #define	PCM_PDM_TR_INP_BYTES	(8192)
 #define	PCM_PDM_TR_OUT_BYTES	(2048)
 #define	PCM_PDM_TR_OUT_SIZE		((PCM_PDM_PERIOD_BYTES*PCM_PDM_PERIOD_SIZE)/ PCM_PDM_TR_OUT_BYTES) /* 160  PCM_PDM_PERIOD_BYTES * PCM_PDM_PERIOD_SIZE == PCM_PDM_TR_OUT_BYTES * PCM_PDM_TR_OUT_SIZE */
 
-#define	PCM_I2S_PERIOD_BYTES	4096	// 8192, 4096
-#define	PCM_I2S_PERIOD_SIZE		32		// 16, 32
+#define	PCM_I2S_PERIOD_BYTES	4096	/* 8192, 4096 */
+#define	PCM_I2S_PERIOD_SIZE		32		/* 16, 32 */
 
-#define	PCM_UAC_PERIOD_BYTES	4096	// FIX: 1024 or 4096
-#define	PCM_UAC_PERIOD_SIZE		16		// FIX: For UAC (UAC)
+#define	PCM_UAC_PERIOD_BYTES	4096	/* FIX: 1024 or 4096 */
+#define	PCM_UAC_PERIOD_SIZE		16		/* FIX: For UAC (UAC) */
 
 #define MAX_THREADS  			10
 #define MAX_QUEUEBUFF  			10
@@ -241,6 +242,13 @@ static void stream_debug(char *buffer, const char *fmt, ...)
 /***************************************************************************************/
 static int __i2s_sample_rate = PCM_I2S_START_RATE;
 
+static struct aec_tm_debug {
+	long long min;
+	long long max;
+	long long tot;
+	long long cnt;
+} aec_tm_debug;
+
 /*
  * capture time
  * stop  -> start : 4~5ms
@@ -329,13 +337,15 @@ __reinit:
 		if (b_1st_sample) {
 			END_TIMESTAMP_US(ts, td);
 
-//			struct timeval tv;
-//			gettimeofday(&tv, NULL);
-//			printf("[%6ld.%06ld s] <%4d> [CAPT] capt [%4d][%3lld.%03lld ms] %s\n",
-//				tv.tv_sec, tv.tv_usec, tid, period_bytes, td/1000, td%1000, stream->pcm_name);
-//			if (stream->type == STREAM_CAPTURE_PDM)
-//				memset(Buffer, 0, period_bytes);
-
+		#if 0
+			/* clear 1st samples */
+			struct timeval tv;
+			gettimeofday(&tv, NULL);
+			printf("[%6ld.%06ld s] <%4d> [CAPT] capt [%4d][%3lld.%03lld ms] %s\n",
+				tv.tv_sec, tv.tv_usec, tid, period_bytes, td/1000, td%1000, stream->pcm_name);
+			if (stream->type == STREAM_CAPTURE_PDM)
+				memset(Buffer, 0, period_bytes);
+		#endif
 			b_1st_sample = false;
 		}
 
@@ -517,17 +527,16 @@ __reinit:
 		 * PDM data AGC and split save output buffer
 		 */
 #ifdef SUPPORT_PDM_AGC
-		// AGC
 		assert(OBuffer);
 		assert(IBuffer);
 
 		pdm_Run(&pdm_st, (short int*)OBuffer, (int*)IBuffer, agc_dB);
 
-		// SPLIT copy
+		/* for SPLIT copy */
 		int length = period_bytes/2;
 		split_pdm_data((int*)OBuffer, tmp_PDM[0], tmp_PDM[1], period_bytes);
 
-		// Realignment PDM OUT [L0/R0/L1/R1] -> [L0/R0 ..... L1/R1 ....]
+		/* Realignment PDM OUT [L0/R0/L1/R1] -> [L0/R0 ..... L1/R1 ....] */
 		for (int i = 0; 2 > i ; i++) {
 			unsigned char *dst = OBuffer+(i*(length));
 			memcpy(dst, tmp_PDM[i], length);
@@ -548,8 +557,8 @@ __reinit:
 				memset(OBuffer, 0, period_bytes);
 #endif
 
-		pIBuf->PopRelease(PCM_PDM_TR_INP_BYTES);	// Release
-		pOBuf->PushRelease(period_bytes);			// Release
+		pIBuf->PopRelease(PCM_PDM_TR_INP_BYTES);
+		pOBuf->PushRelease(period_bytes);
 		pr_debug("<%4d> [PDM ] %s %d %s\n",
 			tid, pOBuf->GetBufferName(), pOBuf->GetAvailSize(), __FUNCTION__);
 	}
@@ -613,14 +622,15 @@ __STATIC__ void *audio_aec_out(void *data)
 	int WAIT_TIME = 1;
 
 #ifdef SUPPORT_AEC_PCMOUT
+	struct aec_tm_debug *atd = &aec_tm_debug;
 	long long ts = 0, td = 0, lp = 0;
-	long long t_min = (-1);
+	long long t_min = 1000*1000;
 	long long t_max = 0;
 	long long t_tot = 0;
 #endif
 
-	int aec_buf_bytes = PCM_AEC_PERIOD_BYTES;	// For Ref
-	int buf_out_bytes = PCM_PDM_TR_OUT_BYTES;	// <--- must be 2048 : Split 1024 * 2
+	int aec_buf_bytes = PCM_AEC_PERIOD_BYTES;	/* For Ref */
+	int buf_out_bytes = PCM_PDM_TR_OUT_BYTES;	/* <--- must be 2048 : Split 1024 * 2 */
 	bool b_FileSave = false;
 	int tid = gettid();
 
@@ -635,12 +645,12 @@ __STATIC__ void *audio_aec_out(void *data)
 	int *Out_PCM_aec1 = new int[256], *Out_PCM_aec2 = new int[256];
 	int *Out_PCM = new int[256];
 #endif
-	int *Dummy = new int[256];	// L/R : 256 Frame
+	int *Dummy = new int[256];	/* L/R : 256 Frame */
 	int  ISYNC[1024];
 	int n = 0;
 
-	int *In_Buf[2] = { Dummy, Dummy };	// PDM : L1/R1, L1/R1, L1/R1, ...
-	int *In_Ref[2] = { Dummy, Dummy };	// I2S
+	int *In_Buf[2] = { Dummy, Dummy };	/* PDM : L1/R1, L1/R1, L1/R1, ... */
+	int *In_Ref[2] = { Dummy, Dummy };	/* I2S */
 
 	memset(Dummy, 0, 256*sizeof(int));
 
@@ -753,10 +763,10 @@ __reinit:
 		if (b_FileSave) {
 	#if 1
 			int *d  = (int *)ISYNC;
-			int *s0 = (int *)In_Buf[0];	// INP: PDM0
-			int *s1 = (int *)In_Buf[1];	// INP: PDM1
-			int *s2 = (int *)In_Ref[0];	// REF: I2S0
-			int *s3 = (int *)In_Ref[1];	// REF: I2S1
+			int *s0 = (int *)In_Buf[0];	/* INP: PDM0 */
+			int *s1 = (int *)In_Buf[1];	/* INP: PDM1 */
+			int *s2 = (int *)In_Ref[0];	/* REF: I2S0 */
+			int *s3 = (int *)In_Ref[1];	/* REF: I2S1 */
 
 			for (i = 0; aec_buf_bytes > i; i += 4) {
 				*d++ = *s0++;
@@ -829,6 +839,11 @@ __reinit:
 		if (td > t_max)
 			t_max = td;
 		t_tot += td, lp++;
+
+		atd->min = t_min;
+		atd->max = t_max;
+		atd->tot = t_tot;
+		atd->cnt = lp;
 #endif
 	}
 
@@ -1136,7 +1151,18 @@ static void *stream_monitor(void *arg)
 	struct audio_stream *pStreams = (struct audio_stream *)arg;
 	while (1) {
 		usleep(STREAM_MONITOR_PERIOD);
+
 		printf("================================================================\n");
+
+		#ifdef SUPPORT_AEC_PCMOUT
+		struct aec_tm_debug *adt = &aec_tm_debug;
+
+		printf("AEC : min %3llu.%03llu ms, max %3llu.%03llu ms, avr %3llu.%03llu ms\n",
+			adt->min/1000, adt->min%1000, adt->max/1000, adt->max%1000,
+			(adt->tot/adt->cnt)/1000, (adt->tot/adt->cnt)%1000);
+		printf("----------------------------------------------------------------\n");
+		#endif
+
 		for(int i = 0 ; i < MAX_THREADS ; i++) {
 			CQBuffer *pQBuf = (CQBuffer *)pStreams[i].qbuf;
 			if( pQBuf ){
@@ -1243,10 +1269,10 @@ int main(int argc, char **argv)
 		aec_mono_init();
 #endif
 
-	/* player */
-	// I2SRT5631 : SVT
-	// I2SES8316 : DRONE
-	/* capture: cat /proc/asound/cards */
+	/* player
+	 * I2SRT5631 : SVT
+	 * I2SES8316 : DRONE
+	 * capture: cat /proc/asound/cards */
 	audio_init_stream(&streams[0],  0,  0, "default:CARD=UAC2Gadget"	, STREAM_PLAYBACK   , CH_2, 16000, SAMPLE_BITS_16, PCM_UAC_PERIOD_BYTES, PCM_UAC_PERIOD_SIZE);	// UAC
 	audio_init_stream(&streams[1], -1, -1, "CAPT Transfer"				, STREAM_TRANS_AEC  , CH_2, 16000, SAMPLE_BITS_16, PCM_AEC_PERIOD_BYTES, PCM_AEC_PERIOD_SIZE);
 	audio_init_stream(&streams[2],  1,  0, "default:CARD=SNDNULL0"   	, STREAM_CAPTURE_I2S, CH_2, 16000, SAMPLE_BITS_16, PCM_I2S_PERIOD_BYTES, PCM_I2S_PERIOD_SIZE);	// I2S1

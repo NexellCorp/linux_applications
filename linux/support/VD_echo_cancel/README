@@ -36,8 +36,8 @@
 		
 		[push/pull]
 
-		#> git pull origin master 
-		#> git push origin HEAD:master 
+		#> git pull nexell_linux master 
+		#> git push nexell_linux HEAD:master 
 
 
 6. Linux kernel : (depend on 3. Toolchain install and 4. Decompress rootfs)	

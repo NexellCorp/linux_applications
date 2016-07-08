@@ -5,7 +5,8 @@
 #include <unistd.h>
 #include "audioplay.h"
 
-#ifdef  DEBUG
+
+#ifdef DEBUG
 #define	pr_debug(m...)	printf(m)
 #else
 #define	pr_debug(m...)
@@ -44,8 +45,8 @@ CAudioPlayer::~CAudioPlayer(void)
 }
 
 bool CAudioPlayer::Open(const char *pcm_name, int card, int device,
-					int channels, int samplerate, int samplebits,
-					int periods, int periodbytes)
+			int channels, int samplerate, int samplebits,
+			int periods, int periodbytes)
 {
     m_PCMConfig.channels = channels;
     m_PCMConfig.rate = samplerate;
@@ -242,8 +243,8 @@ CAudioPlayer::~CAudioPlayer(void)
 }
 
 bool CAudioPlayer::Open(const char *pcm_name, int card, int device,
-					int channels, int samplerate, int samplebits,
-					int periods, int periodbytes)
+			int channels, int samplerate, int samplebits,
+			int periods, int periodbytes)
 {
 	int err;
 
@@ -254,7 +255,7 @@ bool CAudioPlayer::Open(const char *pcm_name, int card, int device,
 		return false;
   	}
 
-	// allocate hw params
+	/* allocate hw params */
 	err = snd_pcm_hw_params_malloc(&m_pHWParam);
  	if (0 > err) {
   	  printf("E: cannot allocate hardware parameter (%s)\n",
@@ -262,7 +263,7 @@ bool CAudioPlayer::Open(const char *pcm_name, int card, int device,
   	  return false;
   	}
 
-	// clear hw params
+	/* clear hw params */
 	err = snd_pcm_hw_params_any(m_hPCM, m_pHWParam);
  	if (0 > err) {
   	  printf("E: cannot initialize hardware parameter (%s)\n",
@@ -270,14 +271,16 @@ bool CAudioPlayer::Open(const char *pcm_name, int card, int device,
   	  return false;
   	}
 
-	// set access type: SND_PCM_ACCESS_RW_INTERLEAVED/ SND_PCM_ACCESS_RW_NOINTERLEAVED
+	/* set access type:
+	 * SND_PCM_ACCESS_RW_INTERLEAVED/ SND_PCM_ACCESS_RW_NOINTERLEAVED
+	 */
 	err = snd_pcm_hw_params_set_access(m_hPCM, m_pHWParam, m_HWAccess);
  	if (0 > err) {
   	  printf("E: cannot set access type (%s)\n", snd_strerror(err));
   	  return false;
   	}
 
-	// set sample format: SND_PCM_FORMAT_S16_LE
+	/* set sample format: SND_PCM_FORMAT_S16_LE */
   	err = snd_pcm_hw_params_set_format(m_hPCM, m_pHWParam, m_PCMFormat);
  	if (0 > err) {
   	  printf("E: cannot set sample format (0x%x)(%s)\n",
@@ -294,7 +297,7 @@ bool CAudioPlayer::Open(const char *pcm_name, int card, int device,
   	}
 	m_FrameBytes = m_SampleBytes * m_Channels;
 
-	// set sampling rate
+	/* set sampling rate */
 	m_SampleRate = m_ReqSampleRate = samplerate;
 	err = snd_pcm_hw_params_set_rate_near(m_hPCM, m_pHWParam, &m_SampleRate, 0);
   	if (0 > err) {
@@ -302,7 +305,7 @@ bool CAudioPlayer::Open(const char *pcm_name, int card, int device,
   	  return false;
   	}
 
-	// set period frame
+	/* set period frame */
 	snd_pcm_uframes_t __periodframe = periodbytes/m_FrameBytes;
 	m_PeriodBytes = m_ReqPeriodBytes= periodbytes;
 
@@ -322,7 +325,7 @@ bool CAudioPlayer::Open(const char *pcm_name, int card, int device,
         m_PeriodBytes = __periodframe*m_FrameBytes;
 	}
 
-	// set periods
+	/* set periods */
 	m_Periods = m_ReqPeriods = periods;
 	err = snd_pcm_hw_params_set_periods_near(m_hPCM, m_pHWParam, &m_Periods, 0);
 	if (0 > err) {
@@ -343,8 +346,10 @@ bool CAudioPlayer::Open(const char *pcm_name, int card, int device,
   	  return false;
   	}
 
-	/* prevent Broken PIPE error (Underrun) */
-//	if (m_Stream == SND_PCM_STREAM_PLAYBACK) {
+	/*
+	 * prevent Broken PIPE error (Underrun)
+	 * if (m_Stream == SND_PCM_STREAM_PLAYBACK)
+	 */
 	{
 		snd_pcm_sw_params_alloca(&m_pSWParam);
 	 	if (0 > err) {
@@ -432,7 +437,7 @@ int CAudioPlayer::PlayBack(unsigned char *buffer, int bytes)
 	if (NULL == m_hPCM)
 		return -EINVAL;
 
-//	err = snd_pcm_avail(m_hPCM);
+	/* err = snd_pcm_avail(m_hPCM); */
 	err = snd_pcm_avail_delay(m_hPCM, &avail, &delay);
 	if ( 0 > err) {
 		printf("W: pcm avail %s (%d:%d)\n", snd_strerror(err), avail, delay);

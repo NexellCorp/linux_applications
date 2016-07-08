@@ -10,18 +10,12 @@
 #include <sys/un.h>
 #include <linux/netlink.h>
 
-#ifdef  DEBUG
-#define	pr_debug(m...)	printf(m)
-#else
-#define	pr_debug(m...)
-#endif
-
 struct udev_message {
     const char *sample_frame;
     int sample_rate;
 };
 
-__STATIC__ int audio_uevent_init(void)
+static int audio_uevent_init(void)
 {
     struct sockaddr_nl addr;
     int sz = 64*1024;
@@ -45,12 +39,12 @@ __STATIC__ int audio_uevent_init(void)
     return fd;
 }
 
-__STATIC__ void audio_uevent_close(int fd)
+static void audio_uevent_close(int fd)
 {
  	close(fd);
 }
 
-__STATIC__ int audio_uevent_event(int fd, char* buffer, int length)
+static int audio_uevent_event(int fd, char* buffer, int length)
 {
 	struct pollfd fds;
     int n, count;
@@ -67,7 +61,7 @@ __STATIC__ int audio_uevent_event(int fd, char* buffer, int length)
         }
     } while (1);
 
-	// won't get here
+	/* won't get here */
     return 0;
 }
 #endif

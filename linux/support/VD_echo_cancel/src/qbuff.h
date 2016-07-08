@@ -18,13 +18,17 @@ extern "C" {
 #define	IS_FULL(pB)		do {	\
 		assert(pB);	\
 		if (!pB->Is_PushAvail()) 	\
-			printf("[FULL ][%s:%d] %s:%d\n", pB->GetBufferName(), pB->GetAvailSize(), __FUNCTION__, __LINE__);	\
+			printf("[FULL ][%s:%d] %s:%d\n", 	\
+			pB->GetBufferName(), pB->GetAvailSize(), 	\
+			__FUNCTION__, __LINE__);	\
 	} while (0)
 
 #define	IS_EMPTY(pB)		do {	\
 		assert(pB);	\
 		if (!pB->Is_PopAvail())	\
-			printf("[EMPTY][%s:%d] %s:%d\n", pB->GetBufferName(), pB->GetAvailSize(), __FUNCTION__, __LINE__);	\
+			printf("[EMPTY][%s:%d] %s:%d\n", 	\
+			pB->GetBufferName(), pB->GetAvailSize(), 	\
+			__FUNCTION__, __LINE__);	\
 	} while (0)
 
 /***************************************************************************************/
@@ -385,7 +389,7 @@ private:
 	char m_qName[256];
 	unsigned int m_Type;
 
-	// std::atomic<xxx>
+	/* std::atomic<xxx> */
 	int		m_HeadPos;	/* push */
 	int		m_TailPos;	/* Pop */
 	bool	m_bPushAvail;

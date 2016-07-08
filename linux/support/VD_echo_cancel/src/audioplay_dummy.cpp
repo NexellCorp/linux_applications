@@ -5,7 +5,7 @@
 #include <unistd.h>
 #include "audioplay.h"
 
-#ifdef  DEBUG
+#ifdef DEBUG
 #define	pr_debug(m...)	printf(m)
 #else
 #define	pr_debug(m...)
@@ -28,8 +28,8 @@ CAudioPlayer::~CAudioPlayer(void)
 }
 
 bool CAudioPlayer::Open(const char *pcm_name, int card, int device,
-					int channels, int samplerate, int samplebits,
-					int periods, int periodbytes)
+			int channels, int samplerate, int samplebits,
+			int periods, int periodbytes)
 {
     m_PCMConfig.channels = channels;
     m_PCMConfig.rate = samplerate;
@@ -70,6 +70,7 @@ bool CAudioPlayer::Open(const char *pcm_name, int card, int device,
     m_PeriodBytes = periodbytes;
     m_Periods = periods;
 	m_FrameBytes = channels*(samplebits/8);
+
 	return true;
 }
 
@@ -82,12 +83,14 @@ int CAudioPlayer::Capture(unsigned char *buffer, int bytes)
 {
 	int us = 0;
 
-	if (!strncmp(m_pcmName, "default:CARD=SNDNULL", strlen("default:CARD=SNDNULL"))) {
-		us = 42666;	// (1000000/48000) * (8192/4)
+	if (!strncmp(m_pcmName, "default:CARD=SNDNULL",
+			strlen("default:CARD=SNDNULL"))) {
+		us = 42666;	/* (1000000/48000) * (8192/4) */
 		usleep(us);
 	}
 
-	if (!strncmp(m_pcmName, "default:CARD=PDMRecorder", strlen("default:CARD=PDMRecorder"))) {
+	if (!strncmp(m_pcmName, "default:CARD=PDMRecorder",
+			strlen("default:CARD=PDMRecorder"))) {
 		us = 10*1000;
 		usleep(us);
 	}

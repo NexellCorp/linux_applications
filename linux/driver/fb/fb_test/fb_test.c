@@ -4,7 +4,8 @@
 #include <stdlib.h>		/* malloc */
 #include <string.h> 	/* strerror */
 #include <errno.h> 		/* errno */
-#include <pthread.h>
+#include <sys/signal.h>
+#include <sys/time.h>
 
 #include "fb_dev.h"
 #include "fb_draw.h"
@@ -14,53 +15,94 @@
 
 #define	FB_DEV_PATH		"/dev/fb0"
 
-typedef struct {
+struct fb_param {
 	int	fd;
 	int	xresol;
 	int	yresol;
 	int	pixelbyte;
 	unsigned long base;
 	unsigned long length;
+	int x_pitch;
+	int y_pitch;
 	int buffers;
-} fb_param;
+} *__fb_parm;
 
-static fb_param *fb_init_par(char *path)
+static void signal_handler(int sig)
 {
-	fb_param *fpar;
+	struct fb_param *fp = __fb_parm;
+
+	printf("\nAborted by signal %s (%d): ",
+		(char*)strsignal(sig), sig);
+
+	switch(sig)	{
+	case SIGINT:
+			/* Interrupt : signal value = 2 */
+			printf("SIGINT \n");
+			break;
+	case SIGTERM:
+			/* Terminated : signal value = 15 ( Kill Message ) */
+			printf("SIGTERM\n");
+			break;
+	case SIGSEGV:
+			printf("SIGSEGV\n");
+			break;
+	default: break;
+	}
+
+	/* restore fb */
+	fb_flip(fp->fd, 0);
+	exit(0);
+}
+
+static void register_signal(void)
+{
+	signal(SIGINT, signal_handler);
+	signal(SIGTERM, signal_handler);
+	signal(SIGSEGV, signal_handler);
+}
+
+static struct fb_param *fb_init_par(char *path)
+{
+	struct fb_param *fp;
 	unsigned long vaddr = 0, paddr = 0;
 	unsigned long len = 0;
-	int w = 0, h = 0, pixel = 0, bn = 1;
+	int w, h, pixb, bcnt = 1;
+	int xp, yp;
 	int fd;
 
 	fd = fb_open(path);
 	if (0 > fd)
 		return NULL;
 
-	fpar = (fb_param*)malloc(sizeof(fb_param));
-	if (!fpar) {
-		printf("failed malloc size %ld, %s\n", sizeof(fb_param), strerror(errno));
+	fp = (struct fb_param *)malloc(sizeof(*fp));
+	if (!fp) {
+		printf("failed malloc size %zu, %s\n",
+				sizeof(*fp), strerror(errno));
 		return NULL;
 	}
-	memset((void*)fpar, 0, sizeof(fb_param));
+	memset((void*)fp, 0, sizeof(*fp));
 
 	if (0 > fb_mmap(fd, &vaddr, &paddr, &len))
 		goto err_fb;
 
-	if (0 > fb_get_resol(fd, &w, &h, &pixel, &bn))
+	if (0 > fb_get_resol(fd, &w, &h, &pixb, &bcnt, &xp, &yp))
 		goto err_fb;
 
-	fpar->fd = fd;
-	fpar->base = vaddr;
-	fpar->length = len;
-	fpar->xresol = w;
-	fpar->yresol = h;
-	fpar->pixelbyte = pixel;
-	fpar->buffers = bn;
+	fp->fd = fd;
+	fp->base = vaddr;
+	fp->length = len;
+	fp->xresol = w;
+	fp->yresol = h;
+	fp->pixelbyte = pixb;
+	fp->buffers = bcnt;
+	fp->x_pitch = xp;
+	fp->y_pitch = yp;
 
-	printf("%s: virt = 0x%lx(0x%lx), %8ld (%4d * %4d, %d bpp, %d buffers)\n",
-		path, vaddr, paddr, len, w, h, pixel, bn);
+	printf("%s: 0x%lx(0x%lx), %8ld (%4d * %4d : %5d * %5d, %d bpp, %d bn)\n",
+		path, vaddr, paddr, len, w, h,
+		fp->x_pitch, fp->y_pitch, pixb*8, bcnt);
 
-	return fpar;
+	return fp;
 
 err_fb:
 	if (vaddr)
@@ -69,26 +111,26 @@ err_fb:
 	if (fd >= 0)
 		fb_close(fd);
 
-	if (fpar)
-		free(fpar);
+	if (fp)
+		free(fp);
 
 	return NULL;
 }
 
-static void fb_exit_par(fb_param *fpar)
+static void fb_exit_par(struct fb_param *fp)
 {
 	unsigned long base, length;
 	int fd;
-	__assert__(fpar);
+	__assert__(fp);
 
-	fd = fpar->fd;
-	base = fpar->base;
-	length = fpar->length;
+	fd = fp->fd;
+	base = fp->base;
+	length = fp->length;
 
 	if (0 > fd)
 		goto exit_out;
 
-	fb_flip(fd, 0);	/* restore fpar */
+	fb_flip(fd, 0);	/* restore fp */
 
 	if (base)
 		fb_munmap(base, length);
@@ -96,11 +138,12 @@ static void fb_exit_par(fb_param *fpar)
 	fb_close(fd);
 
 exit_out:
-	if (fpar)
-		free(fpar);
+	if (fp)
+		free(fp);
 }
 
-static int fb_change_resol(char *path, int sx, int sy, int width, int height, int pixelbyte)
+static int fb_change_resol(char *path,
+			int sx, int sy, int width, int height, int pixelbyte)
 {
 	int fd, ret;
 
@@ -130,30 +173,82 @@ static int fb_change_pos(char *path, int sx, int sy)
 	return ret;
 }
 
-static void fb_fill_rect(fb_param *fpar, int sx, int sy, int w, int h,
-					unsigned int color, int random)
+static void fb_load_bmp(struct fb_param *fp, int sx, int sy, const char *bmp)
 {
 	unsigned long base;
-	int xres, yres, pixel;
-	int x1, y1, x2, y2;
+	int xres, yres, pixb;
+	void *ptr;
 
-	if (sx > fpar->xresol || sy > fpar->yresol ||
-		w  > fpar->xresol || h  > fpar->yresol ) {
-		printf("over sx %d, sy %d, w %d, h %d (resol %d x %d) \n",
-			sx, sy, w, h, fpar->xresol, fpar->yresol);
+	if (sx > fp->xresol || sy > fp->yresol) {
+		printf("over sx %d, sy %d (resol %d x %d) \n",
+			sx, sy, fp->xresol, fp->yresol);
 		return;
 	}
 
-	base = fpar->base;
-	xres = fpar->xresol;
-	yres = fpar->yresol;
-	pixel = fpar->pixelbyte;
+	base = fp->base;
+	xres = fp->xresol;
+	yres = fp->yresol;
+	pixb = fp->pixelbyte;
+
+	printf("bmp: %s to %d, %d, %d, %d, %dpix\n",
+		bmp, sx, sy, xres, yres, pixb);
+
+	ptr = load_bmp2rgb(bmp, base, xres, yres, pixb);
+
+	unload_bmp(ptr);
+}
+
+static void fb_draw_txt(struct fb_param *fp,
+			const char *txt, int sx, int sy, int hscale, int vscale,
+			unsigned text_color, unsigned int back_color,
+			int alpha)
+{
+	unsigned long base;
+	int xres, yres, pixb;
+	int font = 0;
+
+	if (sx > fp->xresol || sy > fp->yresol) {
+		printf("over sx %d, sy %d (resol %d x %d) \n",
+			sx, sy, fp->xresol, fp->yresol);
+		return;
+	}
+
+	base = fp->base;
+	xres = fp->xresol;
+	yres = fp->yresol;
+	pixb = fp->pixelbyte;
+
+	printf("text: %s to %d,%d scale %d,%d txt 0x%x, back 0x%x, alpha %d\n",
+		txt, sx, sy, hscale, vscale, text_color, back_color, alpha);
+
+	draw_text(txt, sx, sy, hscale, vscale, alpha,
+			text_color, back_color, font, base, xres, yres, pixb);
+}
+
+static void fb_fill_rect(struct fb_param *fp, int sx, int sy, int w, int h,
+					unsigned int color, int random)
+{
+	unsigned long base;
+	int xres, yres, pixb;
+	int x1, y1, x2, y2;
+
+	if (sx > fp->xresol || sy > fp->yresol ||
+		w  > fp->xresol || h  > fp->yresol ) {
+		printf("over sx %d, sy %d, w %d, h %d (resol %d x %d) \n",
+			sx, sy, w, h, fp->xresol, fp->yresol);
+		return;
+	}
+
+	base = fp->base;
+	xres = fp->xresol;
+	yres = fp->yresol;
+	pixb = fp->pixelbyte;
 
 	printf("fill: %d~%d, %d~%d (%dx%d, %dpix) 0x%08x [%s]\n",
-		sx, w, sy, h, xres, yres, pixel, color, random?"random":"fill");
+		sx, w, sy, h, xres, yres, pixb, color, random?"random":"fill");
 
 	if (!random) {
-		fill_rgb(base, xres, yres, pixel, sx, sy, w, h, color);
+		fill_rgb(base, xres, yres, pixb, sx, sy, w, h, color);
 		return;
 	}
 
@@ -183,7 +278,81 @@ static void fb_fill_rect(fb_param *fpar, int sx, int sy, int w, int h,
 
 		color = (int)rand();
 
-		fill_rgb(base, xres, yres, pixel, x1, y1, x2, y2, color);
+		fill_rgb(base, xres, yres, pixb, x1, y1, x2, y2, color);
+	}
+}
+
+static void fb_flip_pan(struct fb_param *fp, int align, int wait)
+{
+	unsigned long base;
+	int xres, yres, pixb;
+	int sx, sy, hs, vs;
+	unsigned int front_color = 0xffffffff;
+	unsigned int back_color = 0x0;
+	int flip_count = 0, size;
+	struct timeval ts, te;
+	double t;
+	int i = 0;
+
+	if (2 > fp->buffers) {
+		printf("fb buffers %d, not support flip pan display\n",
+			fp->buffers);
+		return;
+	}
+
+	xres = fp->xresol;
+	yres = fp->yresol;
+	pixb = fp->pixelbyte;
+	base = fp->base;
+
+	size = fp->x_pitch * fp->y_pitch * fp->pixelbyte;
+	memset((void*)base, 0x0, size);
+
+	sx = (xres / 10);
+	sy = (yres / 10);
+	hs = (sx * 8)/ 8;	/* x font size:  8 */
+	vs = (sy * 8)/16;	/* y font size: 16 */
+
+	/* framebuffer 0 */
+	for (i = 0; fp->buffers > i; i++) {
+		unsigned long addr;
+		char s[16] = { 0, };
+
+		sprintf(s, "%d", i);
+		addr = base + (fp->xresol * fp->yresol * fp->pixelbyte) * i;
+
+		if (align)
+			 addr = FB_ALIGN(addr, align);
+
+		draw_text(s, sx, sy, hs, vs, 0,
+			i & 1 ? front_color : back_color,
+			i & 1 ? back_color  : front_color,
+			0, addr, xres, yres, pixb);
+
+		printf("[flip fb[%d]:0x%lx, offs:0x%lx, align:%d, wait:%d]\n",
+			i, base, addr - base, align, wait);
+	}
+
+	while (1) {
+		int nr = i++ % fp->buffers;
+
+		if (!wait && flip_count == 0)
+			gettimeofday(&ts, NULL);
+
+		fb_flip(fp->fd, nr);
+		flip_count++;
+
+		if (wait)
+			sleep(wait);
+
+		if (!wait && flip_count == 60) {
+			gettimeofday(&te, NULL);
+			t = te.tv_sec + te.tv_usec * 1e-6 -
+				(ts.tv_sec + ts.tv_usec * 1e-6);
+			printf("freq: %.02fHz\n", flip_count / t);
+			flip_count = 0;
+			ts = te;
+		}
 	}
 }
 
@@ -194,73 +363,159 @@ void print_usage(void)
     printf("-d framebuffer node path \n");
     printf("-f color  fill framebuffer with input color (hex)\n");
 	printf("-r random fill framebuffer \n");
-    printf("-p fill framebuffer in position (ex> 0,1024,0,600 : startx,width, starty,height) \n");
+    printf("-p fill framebuffer in position\n");
+    printf("   options [startx],[starty],[width],[height]\n");
 	printf("-b load bmp to framebuffer\n");
-	printf("-c change resolution (ex> 1024,600,4 : width,height,pixelbyte)\n");
-	printf("-m move fb (ex> 0,100 : startx,starty)\n");
+	printf("-s draw input text with option '-t'\n");
+	printf("-t draw text config\n");
+	printf("   options [startx],[starty],[horizontal scale],[vertical scale],[text color],[back color],[alpha]\n");
+	printf("-i pan display\n");
+	printf("   options [align] [wait]\n");
+	printf("-c change resolution, *** note> support private IoCtl\n");
+	printf("   options [width],[height],[pixelbyte]\n");
+	printf("-m move frame buffer, *** note> support private IoCtl\n");
+	printf("   options [startx],[starty]\n");
 }
 
 int main(int argc, char **argv)
 {
 	int opt;
-	fb_param *fpar = NULL;
+	struct fb_param *fp = NULL;
 	char *path = FB_DEV_PATH;
-	char *bmp = NULL;
-	char *endp;
+	char *c;
+
+	char *bmp = NULL, *text = NULL;
 	unsigned int color = FILL_COLOR;
-	int o_random = 0, o_chagne = 0, o_move = 0;
 	int sx = 0, sy = 0, w = 0, h = 0, pixelbyte = 0;
+	int hs = 4, vs = 4, alpha = 0;
+	unsigned text_color = FILL_COLOR, back_color = 0x0;
+
+	int o_random = 0, o_resol = 0, o_move = 0;
+	int o_flip = 0;
 	int ret = 0;
 
-    while (-1 != (opt = getopt(argc, argv, "hd:f:p:rb:c:m:"))) {
+#define	conv_opt(p, v, t)	{	\
+	v = strtol(p, NULL, t), p = strchr(p, ',');	\
+	if (!p)	\
+		break;	\
+	p++;	\
+	}
+
+    while (-1 != (opt = getopt(argc, argv, "hd:f:p:rb:s:t:c:m:i"))) {
 		switch(opt) {
-        case 'h':   print_usage();  exit(0);   	break;
-		case 'd':   path = optarg;				break;
-		case 'f':   color = strtoul(optarg, NULL, 16);	break;
-		case 'r':   o_random = 1;				break;
+        case 'h':
+        		print_usage();
+        		exit(0);
+        		break;
+
+		case 'd':
+				path = optarg;
+				break;
+
+		case 'f':
+			   color = strtoul(optarg, NULL, 16);
+			   break;
+
+		case 'r':
+			   o_random = 1;
+			   break;
+
+		case 's':
+			   text = optarg;
+			   break;
+
+		case 'i':
+			   o_flip = 1;
+			   break;
+
+		case 't':
+				c = optarg;
+				conv_opt(c, sx, 10);
+				conv_opt(c, sy, 10);
+				conv_opt(c, hs, 10);
+				conv_opt(c, vs, 10);
+				conv_opt(c, text_color, 16);
+				conv_opt(c, back_color, 16);
+				conv_opt(c, alpha, 10);
+				break;
+
+		case 'b':
+				bmp = optarg;
+				break;
+
 		case 'p':
-					sx = strtoul(optarg, &endp, 10); endp++;
-					w = strtoul(endp, &endp, 10); endp++;
-					sy = strtoul(endp, &endp, 10); endp++;
-					h = strtoul(endp, NULL, 10);
-					break;
+				c = optarg;
+				conv_opt(c, sx, 10);
+				conv_opt(c, sy, 10);
+				conv_opt(c,  w, 10);
+				conv_opt(c,  h, 10);
+				break;
+
 		case 'c':
-					o_chagne = 1;
-					w = strtoul(optarg, &endp, 10); endp++;
-					h = strtoul(endp, &endp, 10); endp++;
-					pixelbyte = strtoul(endp, NULL, 10);
-					break;
+				o_resol = 1;
+				c = optarg;
+				conv_opt(c, w, 10);
+				conv_opt(c, h, 10);
+				conv_opt(c, pixelbyte, 10);
+				break;
+
 		case 'm':
-					o_move = 1;
-					sx = strtoul(optarg, &endp, 10); endp++;
-					sy = strtoul(endp, &endp, 10); endp++;
-					break;
-		case 'b':   bmp = optarg;				break;
-		default:   	print_usage(), exit(0);    	break;
+				o_move = 1;
+				c = optarg;
+				conv_opt(c, sx, 10);
+				conv_opt(c, sy, 10);
+				break;
+
+		default:
+				print_usage(), exit(0);
+				break;
 		};
 	}
 
-	if (o_chagne) {
-		ret = fb_change_resol(path, 0, w, 0, h, pixelbyte);
-		if (0 > ret)
+	if (o_resol) {
+		if (0 > fb_change_resol(path, 0, w, 0, h, pixelbyte))
 			return ret;
 	}
 
 	if (o_move) {
-		ret = fb_change_pos(path, sx, sy);
-		if (0 > ret)
+		if (0 > fb_change_pos(path, sx, sy))
 			return ret;
 	}
 
-	fpar = fb_init_par(path);
-	if (!fpar)
+	register_signal();
+
+	fp = fb_init_par(path);
+	if (!fp)
 		return 0;
 
-	fb_fill_rect(fpar, sx, sy,
-		(w ? w : fpar->xresol), (h ? h : fpar->yresol),
-		color, o_random);
+	__fb_parm = fp;
 
-	fb_exit_par(fpar);
+	if (o_flip) {
+		int align = 0, wait = 0;
+
+		if (argc > optind)
+			align = strtol(argv[optind++], NULL, 10);
+
+		if (argc > optind)
+			wait = strtol(argv[optind++], NULL, 10);
+
+		fb_flip_pan(fp, align, wait);
+		return 0;
+	}
+
+	w = w ? : fp->xresol;
+	h = h ? : fp->yresol;
+
+	if (bmp)
+		fb_load_bmp(fp, sx, sy, bmp);
+	else
+		fb_fill_rect(fp, sx, sy, w, h, color, o_random);
+
+	if (text)
+		fb_draw_txt(fp, text, sx, sy, hs, vs,
+			text_color, back_color, alpha);
+
+	fb_exit_par(fp);
 
 	return 0;
 }

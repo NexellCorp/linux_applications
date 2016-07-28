@@ -13,9 +13,9 @@
 
 #define NXPFB_SET_POS	 	_IOW('N', 104, __u32)
 
-/*-----------------------------------------------------------------------------
+/*
  * Frame buffer device APIs
- -----------------------------------------------------------------------------*/
+ */
 int fb_open(const char *name)
 {
 	int fd = open(name, O_RDWR);
@@ -32,7 +32,8 @@ void fb_close(int fd)
 		close(fd);
 }
 
-int fb_mmap(int fd, unsigned long *vaddr, unsigned long *paddr, unsigned long *len)
+int fb_mmap(int fd, unsigned long *vaddr,
+			unsigned long *paddr, unsigned long *len)
 {
 	void * fb_base = NULL;
 	struct fb_var_screeninfo var;
@@ -41,19 +42,19 @@ int fb_mmap(int fd, unsigned long *vaddr, unsigned long *paddr, unsigned long *l
 	__assert__(fd >= 0);
 
 	if (0 > ioctl(fd, FBIOGET_FSCREENINFO, &fix)) {
-		printf("Fail: ioctl(0x%x): %s\n", FBIOGET_FSCREENINFO, strerror(errno));
+		printf("Fail: FBIOGET_FSCREENINFO %s\n", strerror(errno));
 		return -1;
 	}
 
 	if (0 > ioctl(fd, FBIOGET_VSCREENINFO, &var)) {
-		printf("Fail: ioctl(0x%x): %s\n", FBIOGET_VSCREENINFO, strerror(errno));
+		printf("Fail: FBIOGET_VSCREENINFO %s\n", strerror(errno));
 		return -1;
 	}
 
-	fb_len  = (var.xres * var.yres_virtual * var.bits_per_pixel/8);
+	fb_len  = (var.xres_virtual * var.yres_virtual * var.bits_per_pixel/8);
 	fb_base = (void*)mmap(0, fb_len, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
 	if ((unsigned long)fb_base == (unsigned long)(-1)) {
-		printf("Fail: mmap: %s\n", strerror(errno));
+		printf("Fail: mmap %s\n", strerror(errno));
 		return -1;
 	}
 
@@ -72,7 +73,8 @@ void fb_munmap(unsigned long vaddr, unsigned long len)
 		munmap((void*)vaddr, len);
 }
 
-int fb_get_resol(int fd, int *width, int *height, int *pixbyte, int *buffcnt)
+int fb_get_resol(int fd, int *width, int *height,
+			int *pixbyte, int *buffcnt, int *x_pitch, int *y_pitch)
 {
 	struct fb_var_screeninfo var;
 	int ret;
@@ -80,7 +82,7 @@ int fb_get_resol(int fd, int *width, int *height, int *pixbyte, int *buffcnt)
 
 	ret = ioctl(fd, FBIOGET_VSCREENINFO, &var);
 	if (0 > ret) {
-		printf("Fail: ioctl(0x%x): %s\n", FBIOGET_VSCREENINFO, strerror(errno));
+		printf("Fail: FBIOGET_VSCREENINFO %s\n", strerror(errno));
 		return ret;
 	}
 
@@ -96,10 +98,45 @@ int fb_get_resol(int fd, int *width, int *height, int *pixbyte, int *buffcnt)
 	if (buffcnt)
 		*buffcnt = var.yres_virtual/var.yres;
 
+	if (x_pitch)
+		*x_pitch  = var.xres_virtual;
+
+	if (y_pitch)
+		*y_pitch = var.yres_virtual;
+
 	return 0;
 }
 
-int fb_set_resol(int fd, int startx, int starty, int width, int height, int pixbyte)
+void fb_flip(int fd, int nr)
+{
+	struct fb_var_screeninfo var;
+	int avail;
+	int ret;
+
+	__assert__(fd >= 0);
+
+	ret = ioctl(fd, FBIOGET_VSCREENINFO, &var);
+	if (0 > ret) {
+		printf("Fail: FBIOGET_VSCREENINFO %s\n", strerror(errno));
+		return;
+	}
+
+	avail = var.yres_virtual/var.yres;
+	if (nr > avail) {
+		printf("Fail: fb buffer %d is over support buffers %d\n", nr, avail);
+		return;
+	}
+
+	/* set buffer */
+	var.yoffset = (var.yres * nr);
+
+	ret = ioctl(fd, FBIOPAN_DISPLAY, &var);
+	if (0 > ret)
+		printf("Fail: FBIOPAN_DISPLAY %s\n", strerror(errno));
+}
+
+int fb_set_resol(int fd,
+			int startx, int starty, int width, int height, int pixbyte)
 {
 	struct fb_var_screeninfo var;
 	int pos[3] = { 0, };	/* left, right, waitsycn */
@@ -109,7 +146,7 @@ int fb_set_resol(int fd, int startx, int starty, int width, int height, int pixb
 	/*  1. Get var */
 	ret = ioctl(fd, FBIOGET_VSCREENINFO, &var);
 	if (0 > ret) {
-		printf("Fail: ioctl(0x%x): %s\n", FBIOGET_VSCREENINFO, strerror(errno));
+		printf("Fail: FBIOGET_VSCREENINFO %s\n", strerror(errno));
 		return ret;
 	}
 
@@ -120,7 +157,7 @@ int fb_set_resol(int fd, int startx, int starty, int width, int height, int pixb
 	/*  2. Set var */
 	ret = ioctl(fd, FBIOPUT_VSCREENINFO, &var);
 	if (0 > ret) {
-		printf("Fail: ioctl(0x%x): %s\n", FBIOPUT_VSCREENINFO, strerror(errno));
+		printf("Fail: FBIOPUT_VSCREENINFO %s\n", strerror(errno));
 		return ret;
 	}
 
@@ -133,7 +170,7 @@ int fb_set_resol(int fd, int startx, int starty, int width, int height, int pixb
 
 	ret = ioctl(fd, NXPFB_SET_POS, pos);
 	if (0 > ret) {
-		printf("Fail: ioctl(0x%x): %s\n", NXPFB_SET_POS, strerror(errno));
+		printf("Fail: NXPFB_SET_POS %s\n", strerror(errno));
 		return ret;
 	}
 
@@ -144,6 +181,7 @@ int  fb_pos(int fd, int startx, int starty)
 {
 	int pos[3] = { 0, };	/* left, right, waitsycn */
 	int ret = 0;
+
 	__assert__(fd >= 0);
 
 	if (0 == startx && 0 == starty)
@@ -155,32 +193,11 @@ int  fb_pos(int fd, int startx, int starty)
 
 	ret = ioctl(fd, NXPFB_SET_POS, pos);
 	if (0 > ret) {
-		printf("Fail: ioctl(0x%x): %s\n", NXPFB_SET_POS, strerror(errno));
+		printf("Fail: NXPFB_SET_POS %s\n", strerror(errno));
 		return ret;
 	}
 
 	return 0;
 }
 
-void fb_flip(int fd, int buffno)
-{
-	struct fb_var_screeninfo var;
-	int ret;
-	__assert__(fd >= 0);
 
-	ret = ioctl(fd, FBIOGET_VSCREENINFO, &var);
-	if (0 > ret) {
-		printf("Fail: ioctl(0x%x): %s\n", FBIOGET_VSCREENINFO, strerror(errno));
-		return;
-	}
-
-	if (buffno > (int)(var.yres_virtual/var.yres))
-		return;
-
-	/* set buffer */
-	var.yoffset = (var.yres * buffno);
-
-	ret = ioctl(fd, FBIOPAN_DISPLAY, &var);
-	if (0 > ret)
-		printf("Fail: ioctl(0x%x): %s\n", FBIOPAN_DISPLAY, strerror(errno));
-}

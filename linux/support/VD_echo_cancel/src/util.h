@@ -5,8 +5,6 @@
 #include <signal.h>
 #include <sys/syscall.h>
 
-/***************************************************************************************/
-#define	__STATIC__	static
 
 /***************************************************************************************/
 #define	RUN_TIMESTAMP_US(s) {						\
@@ -31,14 +29,14 @@ struct list_entry {
 #define list_for_each(pos, head) \
     for (pos = (head)->next; pos != (head); pos = pos->next)
 
-__STATIC__ inline void INIT_LIST_HEAD(struct list_entry *list, void *data)
+static inline void INIT_LIST_HEAD(struct list_entry *list, void *data)
 {
     list->next = list;
     list->prev = list;
     list->data = data;
 }
 
-__STATIC__ inline void __list_add(struct list_entry *list,
+static inline void __list_add(struct list_entry *list,
 					struct list_entry *prev, struct list_entry *next)
 {
     next->prev = list, list->next = next;
@@ -46,7 +44,7 @@ __STATIC__ inline void __list_add(struct list_entry *list,
 }
 
 /* add to tail */
-__STATIC__ inline void list_add(struct list_entry *list, struct list_entry *head)
+static inline void list_add(struct list_entry *list, struct list_entry *head)
 {
 	__list_add(list, head->prev, head);
 }
@@ -57,8 +55,8 @@ __STATIC__ inline void list_add(struct list_entry *list, struct list_entry *head
 #include <sys/resource.h>
 #include <linux/sched.h> 	/* SCHED_NORMAL, SCHED_FIFO, SCHED_RR, SCHED_BATCH */
 
-// set_new_scheduler(getpid(), SCHED_FIFO, 99)
-__STATIC__ int set_new_scheduler(pid_t pid, int policy, int priority)
+/* set_new_scheduler(getpid(), SCHED_FIFO, 99) */
+static int set_new_scheduler(pid_t pid, int policy, int priority)
 {
 	struct sched_param param;
 	int maxpri = 0, minpri = 0;
@@ -75,8 +73,11 @@ __STATIC__ int set_new_scheduler(pid_t pid, int policy, int priority)
 	}
 
 	if(SCHED_NORMAL == policy) {
-		maxpri =  20;	// #define NICE_TO_PRIO(nice)	(MAX_RT_PRIO + (nice) + 20), MAX_RT_PRIO 100
-		minpri = -20;	// nice
+		/* #define NICE_TO_PRIO(nice)
+		 * (MAX_RT_PRIO + (nice) + 20), MAX_RT_PRIO 100
+		 */
+		maxpri =  20;
+		minpri = -20;	/* nice */
 	} else {
 		maxpri = sched_get_priority_max(policy);
 		minpri = sched_get_priority_min(policy);
@@ -108,7 +109,7 @@ __STATIC__ int set_new_scheduler(pid_t pid, int policy, int priority)
 #endif
 
 /***************************************************************************************/
-__STATIC__ pid_t gettid(void)
+static pid_t gettid(void)
 {
 	return syscall(__NR_gettid);
 }
@@ -116,14 +117,15 @@ __STATIC__ pid_t gettid(void)
 #include <execinfo.h>
 
 #define BT_ARRAY_SIZE	256
-__STATIC__ void sig_handler(int sig)
+static void sig_handler(int sig)
 {
 	void *array[BT_ARRAY_SIZE];
-	size_t size;	// get void*'s for all entries on the stack
+	size_t size;
 
-	size = backtrace(array, BT_ARRAY_SIZE);	// print out all the frames to stderr
+	size = backtrace(array, BT_ARRAY_SIZE);
 	fprintf(stderr, "\n\nError: signal %d:\n", sig);
-	backtrace_symbols_fd(array, size, 2);	// #include <execinfo.h>
+	/* #include <execinfo.h> */
+	backtrace_symbols_fd(array, size, 2);
 
 	signal(SIGSEGV, SIG_DFL);
 	raise (SIGSEGV);

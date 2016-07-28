@@ -14,6 +14,7 @@ CFLAGS  += -DTINY_ALSA
 CFLAGS  += -DSUPPORT_AEC_PCMOUT
 
 ifeq ($(DEBUG),y)
+CFLAGS  += -DDEBUG
 CFLAGS  += -g
 CFLAGS  += -fno-omit-frame-pointer
 CFLAGS  += -fstack-protector-all

@@ -61,7 +61,7 @@ static void register_signal(void)
 	signal(SIGSEGV, signal_handler);
 }
 
-static struct fb_param *fb_init_par(char *path)
+static struct fb_param *fb_initialize(char *path)
 {
 	struct fb_param *fp;
 	unsigned long vaddr = 0, paddr = 0;
@@ -117,7 +117,7 @@ err_fb:
 	return NULL;
 }
 
-static void fb_exit_par(struct fb_param *fp)
+static void fb_release(struct fb_param *fp)
 {
 	unsigned long base, length;
 	int fd;
@@ -325,8 +325,8 @@ static void fb_flip_pan(struct fb_param *fp, int align, int wait)
 			 addr = FB_ALIGN(addr, align);
 
 		draw_text(s, sx, sy, hs, vs, 0,
-			i & 1 ? front_color : back_color,
-			i & 1 ? back_color  : front_color,
+			front_color,
+			back_color,
 			0, addr, xres, yres, pixb);
 
 		printf("[flip fb[%d]:0x%lx, offs:0x%lx, align:%d, wait:%d]\n",
@@ -484,7 +484,7 @@ int main(int argc, char **argv)
 
 	register_signal();
 
-	fp = fb_init_par(path);
+	fp = fb_initialize(path);
 	if (!fp)
 		return 0;
 
@@ -515,7 +515,7 @@ int main(int argc, char **argv)
 		fb_draw_txt(fp, text, sx, sy, hs, vs,
 			text_color, back_color, alpha);
 
-	fb_exit_par(fp);
+	fb_release(fp);
 
 	return 0;
 }

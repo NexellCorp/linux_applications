@@ -32,6 +32,7 @@ void fb_munmap(unsigned long base, unsigned long len);
 int  fb_get_resol(int fd, int *width, int *height, int *pixbyte, int *buffcnt,
 			int *x_pitch, int *y_pitch);
 int  fb_set_resol(int fd, int startx, int starty, int width, int height, int pixbyte);
+int fb_show_resol(int fd);
 int  fb_pos(int fd, int startx, int starty);
 void fb_flip(int fd, int buffno);
 

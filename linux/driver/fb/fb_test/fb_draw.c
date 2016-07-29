@@ -91,12 +91,14 @@ static void put_pixel_555to565(unsigned long base,
 	*(u16 *)(base + (ypos * width + xpos) * 2) = (u16)RGB555TO565(color);
 }
 
+#if 0
 static void put_pixel_565to565(unsigned long base,
 			int xpos, int ypos, int width, int height, unsigned int color)
 {
 	UNUSED(height);
 	*(u16 *)(base + (ypos * width + xpos) * 2) = (u16)color & 0xFFFF;
 }
+#endif
 
 static void put_pixel_888to888(unsigned long base,
 			int xpos, int ypos, int width, int height, unsigned int color)
@@ -111,9 +113,12 @@ static void put_pixel_565to888(unsigned long base,
 			int xpos, int ypos, int width, int height, unsigned int color)
 {
 	UNUSED(height);
-	*(u8 *)(base + (ypos * width + xpos) * 3 + 0) = (((color >> 0 ) << 3) & 0xf8) | (((color >> 0 ) >> 2) & 0x7);
-	*(u8 *)(base + (ypos * width + xpos) * 3 + 1) = (((color >> 5 ) << 2) & 0xfc) | (((color >> 5 ) >> 4) & 0x3);
-	*(u8 *)(base + (ypos * width + xpos) * 3 + 2) = (((color >> 11) << 3) & 0xf8) | (((color >> 11) >> 2) & 0x7);
+	*(u8 *)(base + (ypos * width + xpos) * 3 + 0) =
+		(((color >> 0 ) << 3) & 0xf8) | (((color >> 0 ) >> 2) & 0x7);
+	*(u8 *)(base + (ypos * width + xpos) * 3 + 1) =
+		(((color >> 5 ) << 2) & 0xfc) | (((color >> 5 ) >> 4) & 0x3);
+	*(u8 *)(base + (ypos * width + xpos) * 3 + 2) =
+	(((color >> 11) << 3) & 0xf8) | (((color >> 11) >> 2) & 0x7);
 }
 
 static void put_pixel_888to8888(unsigned long base,
@@ -127,9 +132,12 @@ static void put_pixel_565to8888(unsigned long base,
 			int xpos, int ypos, int width, int height, unsigned int color)
 {
 	UNUSED(height);
-	*(u8 *)(base + (ypos * width + xpos) * 4 + 0) = (((color >> 0 ) << 3) & 0xf8) | (((color >> 0 ) >> 2) & 0x7);
-	*(u8 *)(base + (ypos * width + xpos) * 4 + 1) = (((color >> 5 ) << 2) & 0xfc) | (((color >> 5 ) >> 4) & 0x3);
-	*(u8 *)(base + (ypos * width + xpos) * 4 + 2) = (((color >> 11) << 3) & 0xf8) | (((color >> 11) >> 2) & 0x7);
+	*(u8 *)(base + (ypos * width + xpos) * 4 + 0) =
+		(((color >> 0 ) << 3) & 0xf8) | (((color >> 0 ) >> 2) & 0x7);
+	*(u8 *)(base + (ypos * width + xpos) * 4 + 1) =
+		(((color >> 5 ) << 2) & 0xfc) | (((color >> 5 ) >> 4) & 0x3);
+	*(u8 *)(base + (ypos * width + xpos) * 4 + 2) =
+		(((color >> 11) << 3) & 0xf8) | (((color >> 11) >> 2) & 0x7);
 	*(u8 *)(base + (ypos * width + xpos) * 4 + 3) = 0xFF; // No Alpha
 }
 
@@ -140,8 +148,8 @@ static void alpha_pixel_888to565(unsigned long base,
 {
 	UNUSED(height);
 	*(unsigned short*)((ulong)(base + (ypos * width + xpos) * 2)) =
-		(*(unsigned short*)((ulong)(base + (ypos * width + xpos) * 2)) & RGB565_ALPHA_MASK>>1)  |
-		(unsigned short)RGB888TO565(color);
+		(*(unsigned short*)((ulong)(base + (ypos * width + xpos) * 2)) &
+		RGB565_ALPHA_MASK>>1) | (unsigned short)RGB888TO565(color);
 }
 
 static void alpha_pixel_888to888(unsigned long base,
@@ -394,9 +402,12 @@ void * load_bmp2rgb(const char *name,
 				green = *(pixptr+1);
 				blue  = *(pixptr+0);
 				if (2 == pixelbyte) {
-					red   = dither_pattern5[red   & 0x7][lx%3][ly%3] + (red  >>3);	red   = (red  >31) ? 31: red;
-					green = dither_pattern6[green & 0x3][lx%2][ly%2] + (green>>2);	green = (green>63) ? 63: green;
-					blue  = dither_pattern5[blue  & 0x7][lx%3][ly%3] + (blue >>3);	blue  = (blue >31) ? 31: blue;
+					red   = dither_pattern5[red   & 0x7][lx%3][ly%3] + (red  >>3);
+					red   = (red  >31) ? 31: red;
+					green = dither_pattern6[green & 0x3][lx%2][ly%2] + (green>>2);
+					green = (green>63) ? 63 : green;
+					blue  = dither_pattern5[blue  & 0x7][lx%3][ly%3] + (blue >>3);
+					blue  = (blue >31) ? 31: blue;
 					color	= (red<<11) | (green<<5) | (blue);
 					*(u16*)(framebase + (ly * xresol + lx) * 2) = (u16)color;
 				} else	 {
@@ -449,7 +460,8 @@ void * load_bmp2uyuv(const char *name,
 	// Check BMP file type.
 	ret = read(fd, (void*)&BMP_ID, 2);
 	if (ret > 0 || BMP_ID != 0x4D42) {
-		printf("Fail: %s Unknonw BMP (type:0x%x, len=%d) ...\n", path, BMP_ID, (int)fsta.st_size);
+		printf("Fail: %s Unknonw BMP (type:0x%x, len=%d) ...\n",
+			path, BMP_ID, (int)fsta.st_size);
 		return NULL;
 	}
 
@@ -538,8 +550,9 @@ void * load_bmp2uyuv(const char *name,
 	if (bmp_pixelbyte == 3) {
 		u8	r, g, b, Y[2][2], U[2][2], V[2][2];
 		u32 lcd_pitch = xresol * pixelbyte;			/* LCD stride */
-		u32 bmp_pitch = (((bmp_info.width * 3) + 3) / 4) * 4;	/* BMP stride ,
-														  a line size of BMP must be aligned on DWORD boundary. */
+		u32 bmp_pitch = (((bmp_info.width * 3) + 3) / 4) * 4;
+		/* BMP stride ,
+		 a line size of BMP must be aligned on DWORD boundary. */
 		for(ly = s_sy, by = b_ey; by > b_sy; ly += 2, by -= 2) {
 			for(lx = s_sx*pixelbyte, bx = b_sx; b_ex >= bx; lx+=(pixelbyte + 2), bx+=2) {
 				pixptr = (u8*)(mapptr + (by * bmp_pitch) + (bx * bmp_pixelbyte));
@@ -571,7 +584,7 @@ void * load_bmp2uyuv(const char *name,
 				put_pixel_uyvy(framebase, (u32)lx, (u32)ly , &Y[0][0], &U[0][0], &V[0][0], lcd_pitch);
 			}
 		/*
-		 *	printf("[%4d:%4d, %d:%d, %d]-----------------------------\n", ly, lx, by, bx, bmp_pitch);
+		 *	printf("[%4d:%4d, %d:%d, %d]\n", ly, lx, by, bx, bmp_pitch);
 		 */
 		}
 	}

@@ -73,10 +73,10 @@ void fb_munmap(unsigned long vaddr, unsigned long len)
 		munmap((void*)vaddr, len);
 }
 
-int fb_get_resol(int fd, int *width, int *height,
-			int *pixbyte, int *buffcnt, int *x_pitch, int *y_pitch)
+int fb_show_resol(int fd)
 {
 	struct fb_var_screeninfo var;
+	struct fb_fix_screeninfo fix;
 	int ret;
 	__assert__(fd >= 0);
 
@@ -86,8 +86,79 @@ int fb_get_resol(int fd, int *width, int *height,
 		return ret;
 	}
 
+	ret = ioctl(fd, FBIOGET_FSCREENINFO, &fix);
+	if (0 > ret) {
+		printf("Fail: FBIOGET_FSCREENINFO %s\n", strerror(errno));
+		return ret;
+	}
+
+	printf("[var screen]\n");
+	printf("xres: %d\n", var.xres);
+	printf("yres: %d\n", var.yres);
+	printf("xres_virtual: %d\n", var.xres_virtual);
+	printf("yres_virtual: %d\n", var.yres_virtual);
+	printf("xoffset: %d\n", var.xoffset);
+	printf("yoffset: %d\n", var.yoffset);
+	printf("bits_per_pixel: %d\n", var.bits_per_pixel);
+	printf("grayscale: %d\n", var.grayscale);
+	printf("nonstd: %d\n", var.nonstd);
+	printf("activate: %d\n", var.activate);
+	printf("height: %d\n", var.height);
+	printf("width: %d\n", var.width);
+	printf("accel_flags: %d\n", var.accel_flags);
+	printf("pixclock: %d\n", var.pixclock);
+	printf("left_margin: %d\n", var.left_margin);
+	printf("right_margin: %d\n", var.right_margin);
+	printf("upper_margin: %d\n", var.upper_margin);
+	printf("lower_margin: %d\n", var.lower_margin);
+	printf("hsync_len: %d\n", var.hsync_len);
+	printf("vsync_len: %d\n", var.vsync_len);
+	printf("sync: %d\n", var.sync);
+	printf("vmode: %d\n", var.vmode);
+	printf("red: %d/%d\n", var.red.length, var.red.offset);
+	printf("green: %d/%d\n", var.green.length, var.green.offset);
+	printf("blue: %d/%d\n", var.blue.length, var.blue.offset);
+	printf("alpha: %d/%d\n", var.transp.length, var.transp.offset);
+
+	printf("\n[fix screen]\n");
+	printf("smem_start = %p\n", (void *)fix.smem_start);
+	printf("smem_len = %d\n", fix.smem_len);
+	printf("type = %d\n", fix.type);
+	printf("type_aux = %d\n", fix.type_aux);
+	printf("visual = %d\n", fix.visual);
+	printf("xpanstep = %d\n", fix.xpanstep);
+	printf("ypanstep = %d\n", fix.ypanstep);
+	printf("ywrapstep = %d\n", fix.ywrapstep);
+	printf("line_length = %d\n", fix.line_length);
+	printf("mmio_start = %p\n", (void *)fix.mmio_start);
+	printf("mmio_len = %d\n", fix.mmio_len);
+	printf("accel = %d\n", fix.accel);
+
+	return 0;
+}
+
+int fb_get_resol(int fd, int *width, int *height,
+			int *pixbyte, int *buffcnt, int *x_pitch, int *y_pitch)
+{
+	struct fb_var_screeninfo var;
+	struct fb_fix_screeninfo fix;
+	int ret;
+	__assert__(fd >= 0);
+
+	ret = ioctl(fd, FBIOGET_VSCREENINFO, &var);
+	if (0 > ret) {
+		printf("Fail: FBIOGET_VSCREENINFO %s\n", strerror(errno));
+		return ret;
+	}
+
+	ret = ioctl(fd, FBIOGET_FSCREENINFO, &fix);
+	if (0 > ret) {
+		printf("Fail: FBIOGET_FSCREENINFO %s\n", strerror(errno));
+		return ret;
+	}
+
 	if (width)
-		*width  = var.xres;
+		*width  = var.xres_virtual;
 
 	if (height)
 		*height = var.yres;

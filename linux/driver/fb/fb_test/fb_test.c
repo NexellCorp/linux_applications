@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdbool.h>
 #include <unistd.h> 	/* read */
 #include <fcntl.h> 		/* for O_RDWR */
 #include <stdlib.h>		/* malloc */
@@ -37,7 +38,7 @@ static void signal_handler(int sig)
 	switch(sig)	{
 	case SIGINT:
 			/* Interrupt : signal value = 2 */
-			printf("SIGINT \n");
+			printf("SIGINT\n");
 			break;
 	case SIGTERM:
 			/* Terminated : signal value = 15 ( Kill Message ) */
@@ -349,7 +350,7 @@ static void fb_flip_pan(struct fb_param *fp, int align, int wait)
 			gettimeofday(&te, NULL);
 			t = te.tv_sec + te.tv_usec * 1e-6 -
 				(ts.tv_sec + ts.tv_usec * 1e-6);
-			printf("freq: %.02fHz\n", flip_count / t);
+			printf("[%4d] freq: %.02fHz\n", getpid(), flip_count / t);
 			flip_count = 0;
 			ts = te;
 		}
@@ -369,12 +370,13 @@ void print_usage(void)
 	printf("-s draw input text with option '-t'\n");
 	printf("-t draw text config\n");
 	printf("   options [startx],[starty],[horizontal scale],[vertical scale],[text color],[back color],[alpha]\n");
-	printf("-i pan display\n");
+	printf("-n pan display\n");
 	printf("   options [align] [wait]\n");
 	printf("-c change resolution, *** note> support private IoCtl\n");
 	printf("   options [width],[height],[pixelbyte]\n");
 	printf("-m move frame buffer, *** note> support private IoCtl\n");
 	printf("   options [startx],[starty]\n");
+	printf("-i framebuffer info\n");
 }
 
 int main(int argc, char **argv)
@@ -390,18 +392,18 @@ int main(int argc, char **argv)
 	int hs = 4, vs = 4, alpha = 0;
 	unsigned text_color = FILL_COLOR, back_color = 0x0;
 
-	int o_random = 0, o_resol = 0, o_move = 0;
-	int o_flip = 0;
+	bool o_random = false, o_resol = false, o_move = false;
+	bool o_fbinfo = false, o_flip = false;
 	int ret = 0;
 
-#define	conv_opt(p, v, t)	{	\
+#define	opt_strtol(p, v, t)	{	\
 	v = strtol(p, NULL, t), p = strchr(p, ',');	\
 	if (!p)	\
 		break;	\
 	p++;	\
 	}
 
-    while (-1 != (opt = getopt(argc, argv, "hd:f:p:rb:s:t:c:m:i"))) {
+    while (-1 != (opt = getopt(argc, argv, "hd:f:p:rb:s:t:c:m:ni"))) {
 		switch(opt) {
         case 'h':
         		print_usage();
@@ -417,26 +419,26 @@ int main(int argc, char **argv)
 			   break;
 
 		case 'r':
-			   o_random = 1;
+			   o_random = true;
 			   break;
 
 		case 's':
 			   text = optarg;
 			   break;
 
-		case 'i':
-			   o_flip = 1;
+		case 'n':
+			   o_flip = true;
 			   break;
 
 		case 't':
 				c = optarg;
-				conv_opt(c, sx, 10);
-				conv_opt(c, sy, 10);
-				conv_opt(c, hs, 10);
-				conv_opt(c, vs, 10);
-				conv_opt(c, text_color, 16);
-				conv_opt(c, back_color, 16);
-				conv_opt(c, alpha, 10);
+				opt_strtol(c, sx, 10);
+				opt_strtol(c, sy, 10);
+				opt_strtol(c, hs, 10);
+				opt_strtol(c, vs, 10);
+				opt_strtol(c, text_color, 16);
+				opt_strtol(c, back_color, 16);
+				opt_strtol(c, alpha, 10);
 				break;
 
 		case 'b':
@@ -445,26 +447,30 @@ int main(int argc, char **argv)
 
 		case 'p':
 				c = optarg;
-				conv_opt(c, sx, 10);
-				conv_opt(c, sy, 10);
-				conv_opt(c,  w, 10);
-				conv_opt(c,  h, 10);
+				opt_strtol(c, sx, 10);
+				opt_strtol(c, sy, 10);
+				opt_strtol(c,  w, 10);
+				opt_strtol(c,  h, 10);
 				break;
 
 		case 'c':
-				o_resol = 1;
+				o_resol = true;
 				c = optarg;
-				conv_opt(c, w, 10);
-				conv_opt(c, h, 10);
-				conv_opt(c, pixelbyte, 10);
+				opt_strtol(c, w, 10);
+				opt_strtol(c, h, 10);
+				opt_strtol(c, pixelbyte, 10);
 				break;
 
 		case 'm':
-				o_move = 1;
+				o_move = true;
 				c = optarg;
-				conv_opt(c, sx, 10);
-				conv_opt(c, sy, 10);
+				opt_strtol(c, sx, 10);
+				opt_strtol(c, sy, 10);
 				break;
+
+		case 'i':
+			   o_fbinfo = true;
+			   break;
 
 		default:
 				print_usage(), exit(0);
@@ -489,6 +495,9 @@ int main(int argc, char **argv)
 		return 0;
 
 	__fb_parm = fp;
+
+	if (o_fbinfo)
+		fb_show_resol(fp->fd);
 
 	if (o_flip) {
 		int align = 0, wait = 0;

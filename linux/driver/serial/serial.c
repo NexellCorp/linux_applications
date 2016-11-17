@@ -518,8 +518,10 @@ int write_mode(int fd, char * pbuf, int op_bufsize)
 		fret = fgets(pbuf, op_bufsize, stdin);
 		
 		len = strlen(pbuf) - 1;
-		_CRLF_(op_crlf, pbuf, len);
-		len += 1;
+		//_CRLF_(op_crlf, pbuf, len);
+		pbuf[len + 1] = '\r';
+		pbuf[len + 2] = '\n';
+		len +=2;
 		if (op_wdelay) 
 		{
 			char *c = pbuf;
@@ -854,7 +856,7 @@ static void change_baud(int fd, char idx)
  	newtio.c_cflag &= ~CBAUD;	// baudrate mask
 	newtio.c_cflag |=  speed; 	// CS8 | CLOCAL | CREAD;	// CRTSCTS
 
-	tcflush  (fd, TCIFLUSH);
+	tcflush  (fd, TCIOFLUSH);
 	tcsetattr(fd, TCSANOW, &newtio);	
 }
 
@@ -1382,7 +1384,7 @@ int main (int argc, char **argv)
 	//dump_termios(1, &oldtio, "OLD TERMIOS");
 	//dump_termios(1, &newtio, "NEW TERMIOS");
 
-	tcflush  (fd, TCIFLUSH);
+	tcflush  (fd, TCIOFLUSH);
 	tcsetattr(fd, TCSANOW, &newtio);
 
 	show_termios(&newtio, ttypath ,stdout );
@@ -1431,7 +1433,7 @@ _exit:
 	/*
 	 * restore old termios
 	 */
-	tcflush  (fd, TCIFLUSH);
+	tcflush  (fd, TCIOFLUSH);
  	tcsetattr(fd, TCSANOW, &oldtio);
 	if(fd)
 	close(fd);

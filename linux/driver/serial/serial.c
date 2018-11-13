@@ -518,8 +518,9 @@ int write_mode(int fd, char * pbuf, int op_bufsize)
 		fret = fgets(pbuf, op_bufsize, stdin);
 		
 		len = strlen(pbuf) - 1;
-		_CRLF_(op_crlf, pbuf, len);
-		len += 1;
+		pbuf[len + 1] = '\r';
+		pbuf[len + 2] = '\n';
+		len += 2;
 		if (op_wdelay) 
 		{
 			char *c = pbuf;
